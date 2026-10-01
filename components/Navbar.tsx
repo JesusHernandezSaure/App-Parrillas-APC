@@ -109,8 +109,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Usuario Actual */}
             <div className="hidden lg:flex items-center gap-2.5 pl-3 border-l border-slate-200">
-              <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 font-bold text-xs">
-                {currentUser.name.charAt(0)}
+              <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center font-bold text-slate-700 text-xs shrink-0">
+                {currentUser.avatar ? (
+                  <img 
+                    src={currentUser.avatar} 
+                    alt={currentUser.name} 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  currentUser.name.charAt(0)
+                )}
               </div>
               <div className="text-left">
                 <div className="flex items-center gap-1.5">

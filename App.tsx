@@ -93,9 +93,22 @@ export const App: React.FC = () => {
   const [odts, setOdts] = useState<ODT[]>(() => getStoredOdts());
   const [posts, setPosts] = useState<Post[]>(() => getStoredPosts());
 
+  // Real login and user credentials state
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    return localStorage.getItem('apc_is_logged_in') === 'true';
+  });
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
   // Usuario activo (Por defecto: Super Admin para tener el control total inmediato)
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const loaded = getStoredUsers();
+    const savedUserId = localStorage.getItem('apc_logged_user_id');
+    if (savedUserId) {
+      const matched = loaded.find(u => u.id === savedUserId);
+      if (matched) return matched;
+    }
     return loaded[0] || {
       id: 'u1',
       name: 'Dirección General (Super Admin)',
@@ -1079,6 +1092,174 @@ export const App: React.FC = () => {
     updatePostsState(updatedPosts);
   };
 
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanUser = loginUsername.trim().toLowerCase();
+    const cleanPass = loginPassword.trim();
+
+    if (!cleanUser || !cleanPass) {
+      setLoginError('Por favor completa todos los campos.');
+      return;
+    }
+
+    console.log("Attempting login for username:", cleanUser);
+    console.log("Current loaded users list:", users);
+
+    let foundUser = users.find(u => 
+      u.username && u.username.toLowerCase() === cleanUser && 
+      (u.password || '123') === cleanPass
+    );
+
+    // Bulletproof Fail-safe fallback login for Super Admin to prevent any lockout
+    if (!foundUser && cleanUser === 'superadmin' && cleanPass === '123') {
+      console.log("Fail-safe activated: Logging in as default Super Admin");
+      foundUser = {
+        id: 'u1',
+        username: 'superadmin',
+        name: 'Dirección General (Super Admin)',
+        role: 'Super Admin',
+        email: 'superadmin@apcpublicidad.com',
+        isActive: true,
+        password: '123'
+      };
+    }
+
+    if (foundUser) {
+      if (foundUser.isActive === false) {
+        setLoginError('Esta cuenta se encuentra inactiva o suspendida. Contacta a un administrador.');
+        return;
+      }
+      console.log("Login successful! Logged in as:", foundUser.name);
+      setCurrentUser(foundUser);
+      setIsLoggedIn(true);
+      localStorage.setItem('apc_is_logged_in', 'true');
+      localStorage.setItem('apc_logged_user_id', foundUser.id);
+      setLoginError('');
+      setLoginUsername('');
+      setLoginPassword('');
+      if (foundUser.role === 'Cliente' && foundUser.clientId) {
+        setSelectedClientId(foundUser.clientId);
+      }
+    } else {
+      console.warn("Login failed: Invalid username or password");
+      setLoginError('Nombre de usuario o contraseña incorrectos.');
+    }
+  };
+
+  // Render login screen if user is not logged in
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-900 bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans antialiased">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          {/* Logo */}
+          <div className="mx-auto h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black text-2xl tracking-wider shadow-xl border border-amber-300">
+            APC
+          </div>
+          <h2 className="mt-6 text-center text-3xl font-black tracking-tight text-white">
+            Parrillas APC Publicidad
+          </h2>
+          <p className="mt-2 text-center text-xs text-slate-400 max-w-sm mx-auto uppercase tracking-widest font-semibold">
+            Flujo Operativo de Contenidos • ISO 9001
+          </p>
+        </div>
+
+        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
+          <div style={{ backgroundColor: '#1e293b' }} className="bg-slate-800 py-8 px-6 shadow-2xl rounded-3xl border border-slate-700/80">
+            <form className="space-y-6" onSubmit={handleLoginSubmit}>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                  Nombre de Usuario (Login)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={loginUsername}
+                  onChange={(e) => {
+                    setLoginUsername(e.target.value);
+                    setLoginError('');
+                  }}
+                  placeholder="Ej. superadmin, ana.ejecutiva"
+                  className="w-full text-sm px-4 py-3 border border-slate-700 rounded-xl bg-slate-950 text-white placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                  Contraseña
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={loginPassword}
+                  onChange={(e) => {
+                    setLoginPassword(e.target.value);
+                    setLoginError('');
+                  }}
+                  placeholder="••••••••"
+                  className="w-full text-sm px-4 py-3 border border-slate-700 rounded-xl bg-slate-950 text-white placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                />
+              </div>
+
+              {loginError && (
+                <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold leading-relaxed">
+                  ⚠️ {loginError}
+                </div>
+              )}
+
+              <div>
+                <button
+                  type="submit"
+                  className="w-full py-3.5 px-4 border border-transparent rounded-xl shadow-lg text-sm font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-all cursor-pointer transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  Iniciar Sesión
+                </button>
+              </div>
+            </form>
+
+            {/* Ayuda para demostración/evaluación */}
+            <div className="mt-8 pt-6 border-t border-slate-700/60 text-xs">
+              <details className="group cursor-pointer">
+                <summary className="flex justify-between items-center text-slate-400 font-bold hover:text-white select-none list-none">
+                  <span>🔑 Ver Credenciales de Demostración</span>
+                  <span className="transition group-open:rotate-180 text-amber-400">▼</span>
+                </summary>
+                <div style={{ backgroundColor: '#0f172a' }} className="mt-4 p-3 bg-slate-950 rounded-xl space-y-2 text-[11px] text-slate-300 border border-slate-800">
+                  <p className="font-semibold text-amber-400 border-b border-slate-800 pb-1">Ingresa con cualquiera de estos perfiles:</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <strong className="text-white block">Super Admin:</strong>
+                      <span>superadmin / 123</span>
+                    </div>
+                    <div>
+                      <strong className="text-white block">Ejecutiva:</strong>
+                      <span>ana.ejecutiva / 123</span>
+                    </div>
+                    <div>
+                      <strong className="text-white block">Médico Revisor:</strong>
+                      <span>dr.garcia / 123</span>
+                    </div>
+                    <div>
+                      <strong className="text-white block">Community Manager:</strong>
+                      <span>sofia.cm / 123</span>
+                    </div>
+                    <div>
+                      <strong className="text-white block">Diseñador Arte:</strong>
+                      <span>pedro.arte / 123</span>
+                    </div>
+                    <div>
+                      <strong className="text-white block">Cliente Sanitas:</strong>
+                      <span>cliente.sanitas / 123</span>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const effectiveRole = (currentUser.role === 'Super Admin' && superAdminRoleView) 
     ? superAdminRoleView 
     : currentUser.role;
@@ -1099,8 +1280,9 @@ export const App: React.FC = () => {
           }
         }}
         onLogout={() => {
-          // Reset al Super Admin o primer usuario
-          setCurrentUser(users[0]);
+          setIsLoggedIn(false);
+          localStorage.removeItem('apc_is_logged_in');
+          localStorage.removeItem('apc_logged_user_id');
           setSuperAdminRoleView(null);
         }}
         clientName={currentClient?.name}

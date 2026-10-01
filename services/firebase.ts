@@ -61,6 +61,20 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path
   };
   console.error('Firestore Secure Audit Error: ', JSON.stringify(errInfo));
+  
+  // Safe connection-tolerance fallback: Do not throw on temporary connection failure or network unreachable errors
+  const errorMsg = errInfo.error.toLowerCase();
+  if (
+    errorMsg.includes('could not reach') || 
+    errorMsg.includes('unavailable') || 
+    errorMsg.includes('offline') || 
+    errorMsg.includes('connection failed') ||
+    errorMsg.includes('network')
+  ) {
+    console.warn("Firestore is operating in offline-caching mode. Changes will automatically sync when backend becomes reachable.");
+    return;
+  }
+
   throw new Error(JSON.stringify(errInfo));
 }
 
