@@ -1,12 +1,12 @@
 {
-  "projectId": "multuverso-mar",
-  "appId": "1:691207186231:web:23a79592c14c429cc5dcb2",
-  "apiKey": "AIzaSyB-qL5NzH4WMViZbE8fjWJx2lGv5bd3Z5w",
-  "authDomain": "multuverso-mar.firebaseapp.com",
+  "projectId": "parrillas-apc",
+  "appId": "1:326082658059:web:3f9bb733ba437ca292ec0e",
+  "apiKey": "AIzaSyC6rCpy8yKnTQDgi0g9TdLIEXvlZVP7lkA",
+  "authDomain": "parrillas-apc.firebaseapp.com",
   "firestoreDatabaseId": "parrilas-apc-01",
-  "storageBucket": "multuverso-mar.firebasestorage.app",
-  "messagingSenderId": "691207186231",
+  "storageBucket": "parrillas-apc.firebasestorage.app",
+  "messagingSenderId": "326082658059",
   "measurementId": "",
-  "oAuthClientId": "691207186231-nhshmc5df04teg9olglb81l8vfkpe5bt.apps.googleusercontent.com",
+  "oAuthClientId": "326082658059-1lr7p899cojtebpo3djp42a7i1vb9de1.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

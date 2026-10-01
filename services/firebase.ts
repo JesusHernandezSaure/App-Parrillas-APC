@@ -1,14 +1,16 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { 
-  getFirestore, doc, getDocFromServer, getDocs, collection, 
+  initializeFirestore, doc, getDocFromServer, getDocs, collection, 
   setDoc, deleteDoc, onSnapshot, writeBatch 
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-// Initialize Firebase SDK
+// Initialize Firebase SDK with long-polling enabled to bypass iframe sandbox/proxy connection constraints
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 
 // Operational Enums & Types for audit error logging
