@@ -60,6 +60,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
   const [pacingFilter, setPacingFilter] = useState<string>('all');
   const [duplicatingPost, setDuplicatingPost] = useState<Post | null>(null);
   const [targetDuplicateRed, setTargetDuplicateRed] = useState('Instagram');
+  const [selectedMetricFilter, setSelectedMetricFilter] = useState<'all' | 'waitingExecutive' | 'internalFinal' | 'clientChanges' | 'readyToPublish' | 'delayed'>('all');
 
   const isOdtCreator = canCreateOdt !== false && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin');
 
@@ -100,6 +101,26 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
       list = list.filter(p => p.clientId === activeClient.id);
     } else {
       list = list.filter(p => myClients.some(c => c.id === p.clientId));
+    }
+
+    // Filtro Interactivo por Métrica de Tarjeta seleccionada
+    if (selectedMetricFilter !== 'all') {
+      if (selectedMetricFilter === 'waitingExecutive') {
+        list = list.filter(p => p.estado === 'Esperando Ejecutivo');
+      } else if (selectedMetricFilter === 'internalFinal') {
+        list = list.filter(p => p.estado === 'Aprobación Interna Final');
+      } else if (selectedMetricFilter === 'clientChanges') {
+        list = list.filter(p => 
+          p.estado === 'Cambios solicitados por Cliente' || 
+          p.estado === 'Ajustes de Copy' ||
+          p.aprobacionClienteCopy?.status === 'Cambios Solicitados' ||
+          p.aprobacionClienteMaterial?.status === 'Cambios Solicitados'
+        );
+      } else if (selectedMetricFilter === 'readyToPublish') {
+        list = list.filter(p => p.estado === 'Listo para Publicar');
+      } else if (selectedMetricFilter === 'delayed') {
+        list = list.filter(p => getDaysInCurrentStage(p) >= 4);
+      }
     }
 
     // Filtro por Etapa del Embudo seleccionada
@@ -148,77 +169,178 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
     }
 
     return list;
-  }, [posts, activeOdt, activeClient, myClients, selectedFunnelStage, pacingFilter, statusFilter, searchTerm]);
+  }, [posts, activeOdt, activeClient, myClients, selectedFunnelStage, pacingFilter, statusFilter, searchTerm, selectedMetricFilter]);
 
-  // Contadores de alertas y bloqueos
+  // Posts segmentados para el ejecutivo logueado (su alcance: clientes asignados o filtro activo de cliente/ODT)
+  const scopedPostsForMetrics = useMemo(() => {
+    if (activeOdt) {
+      return posts.filter(p => p.odtId === activeOdt.id);
+    }
+    if (activeClient) {
+      return posts.filter(p => p.clientId === activeClient.id);
+    }
+    return posts.filter(p => myClients.some(c => c.id === p.clientId));
+  }, [posts, activeOdt, activeClient, myClients]);
+
+  // Contadores de alertas y bloqueos segmentados y dinámicos
   const alertsSummary = useMemo(() => {
-    const waitingExecutive = posts.filter(p => p.estado === 'Esperando Ejecutivo').length;
-    const internalFinal = posts.filter(p => p.estado === 'Aprobación Interna Final').length;
-    const clientChanges = posts.filter(p => 
+    const waitingExecutive = scopedPostsForMetrics.filter(p => p.estado === 'Esperando Ejecutivo').length;
+    const internalFinal = scopedPostsForMetrics.filter(p => p.estado === 'Aprobación Interna Final').length;
+    const clientChanges = scopedPostsForMetrics.filter(p => 
       p.estado === 'Cambios solicitados por Cliente' || 
       p.estado === 'Ajustes de Copy' ||
       p.aprobacionClienteCopy?.status === 'Cambios Solicitados' ||
       p.aprobacionClienteMaterial?.status === 'Cambios Solicitados'
     ).length;
-    const readyToPublish = posts.filter(p => p.estado === 'Listo para Publicar').length;
-    return { waitingExecutive, internalFinal, clientChanges, readyToPublish };
-  }, [posts]);
+    const readyToPublish = scopedPostsForMetrics.filter(p => p.estado === 'Listo para Publicar').length;
+    const delayed = scopedPostsForMetrics.filter(p => getDaysInCurrentStage(p) >= 4).length;
+
+    return { waitingExecutive, internalFinal, clientChanges, readyToPublish, delayed };
+  }, [scopedPostsForMetrics]);
 
   return (
     <div className="space-y-6">
       
       {/* Barra Superior de Métricas de Supervisión */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs flex items-center justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        
+        {/* Tarjeta 1: Parrillas Copy */}
+        <div 
+          onClick={() => setSelectedMetricFilter(prev => prev === 'waitingExecutive' ? 'all' : 'waitingExecutive')}
+          className={`cursor-pointer bg-white rounded-2xl p-4 border transition-all duration-200 flex items-center justify-between select-none ${
+            selectedMetricFilter === 'waitingExecutive'
+              ? 'ring-2 ring-indigo-500 border-indigo-300 bg-indigo-50/20 shadow-xs scale-[1.02]'
+              : 'border-slate-200 hover:border-indigo-300 hover:shadow-xs hover:scale-[1.01]'
+          }`}
+        >
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Parrillas Copy para Cliente</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Parrillas Copy</span>
+              {selectedMetricFilter === 'waitingExecutive' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+              )}
+            </div>
             <p className="text-2xl font-black text-indigo-600 mt-0.5">{alertsSummary.waitingExecutive}</p>
-            <span className="text-[11px] text-slate-500">Listas para enviar a revisión de Copy</span>
+            <span className="text-[10px] text-slate-500 leading-none block mt-1">Listos para enviar copy a cliente</span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-            <Send className="w-5 h-5" />
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-bold transition-colors ${
+            selectedMetricFilter === 'waitingExecutive' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'
+          }`}>
+            <Send className="w-4.5 h-4.5" />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-2xs flex items-center justify-between">
+        {/* Tarjeta 2: Aprobación Interna Final */}
+        <div 
+          onClick={() => setSelectedMetricFilter(prev => prev === 'internalFinal' ? 'all' : 'internalFinal')}
+          className={`cursor-pointer bg-white rounded-2xl p-4 border transition-all duration-200 flex items-center justify-between select-none ${
+            selectedMetricFilter === 'internalFinal'
+              ? 'ring-2 ring-emerald-500 border-emerald-300 bg-emerald-50/20 shadow-xs scale-[1.02]'
+              : 'border-slate-200 hover:border-emerald-300 hover:shadow-xs hover:scale-[1.01]'
+          }`}
+        >
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Aprobación Interna Final</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Aprobación Interna</span>
+              {selectedMetricFilter === 'internalFinal' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              )}
+            </div>
             <p className="text-2xl font-black text-emerald-700 mt-0.5">{alertsSummary.internalFinal}</p>
-            <span className="text-[11px] text-slate-500">Material terminado por autorizar</span>
+            <span className="text-[10px] text-slate-500 leading-none block mt-1">Material terminado por autorizar</span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
-            <ShieldCheck className="w-5 h-5" />
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-bold transition-colors ${
+            selectedMetricFilter === 'internalFinal' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700'
+          }`}>
+            <ShieldCheck className="w-4.5 h-4.5" />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs flex items-center justify-between">
+        {/* Tarjeta 3: Cambios Solicitados */}
+        <div 
+          onClick={() => setSelectedMetricFilter(prev => prev === 'clientChanges' ? 'all' : 'clientChanges')}
+          className={`cursor-pointer bg-white rounded-2xl p-4 border transition-all duration-200 flex items-center justify-between select-none ${
+            selectedMetricFilter === 'clientChanges'
+              ? 'ring-2 ring-rose-500 border-rose-300 bg-rose-50/20 shadow-xs scale-[1.02]'
+              : 'border-slate-200 hover:border-rose-300 hover:shadow-xs hover:scale-[1.01]'
+          }`}
+        >
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Cambios Solicitados</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600">Cambios Cliente</span>
+              {selectedMetricFilter === 'clientChanges' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+              )}
+            </div>
             <p className="text-2xl font-black text-rose-600 mt-0.5">{alertsSummary.clientChanges}</p>
-            <span className="text-[11px] text-slate-500">Requieren tu reasignación u orden</span>
+            <span className="text-[10px] text-slate-500 leading-none block mt-1">Requieren reasignación urgente</span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-            <AlertTriangle className="w-5 h-5" />
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-bold transition-colors ${
+            selectedMetricFilter === 'clientChanges' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-600'
+          }`}>
+            <AlertTriangle className="w-4.5 h-4.5" />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs flex items-center justify-between">
+        {/* Tarjeta 4: Listo para Publicar */}
+        <div 
+          onClick={() => setSelectedMetricFilter(prev => prev === 'readyToPublish' ? 'all' : 'readyToPublish')}
+          className={`cursor-pointer bg-white rounded-2xl p-4 border transition-all duration-200 flex items-center justify-between select-none ${
+            selectedMetricFilter === 'readyToPublish'
+              ? 'ring-2 ring-teal-500 border-teal-300 bg-teal-50/20 shadow-xs scale-[1.02]'
+              : 'border-slate-200 hover:border-teal-300 hover:shadow-xs hover:scale-[1.01]'
+          }`}
+        >
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Listos para Publicación</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Listos Publicar</span>
+              {selectedMetricFilter === 'readyToPublish' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+              )}
+            </div>
             <p className="text-2xl font-black text-teal-600 mt-0.5">{alertsSummary.readyToPublish}</p>
-            <span className="text-[11px] text-slate-500">En cola de programación Community</span>
+            <span className="text-[10px] text-slate-500 leading-none block mt-1">En cola de publicación Community</span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
-            <CheckCircle2 className="w-5 h-5" />
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-bold transition-colors ${
+            selectedMetricFilter === 'readyToPublish' ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-600'
+          }`}>
+            <CheckCircle2 className="w-4.5 h-4.5" />
           </div>
         </div>
+
+        {/* Tarjeta 5: Ritmo de Entrega (Pacing / Demorados) */}
+        <div 
+          onClick={() => setSelectedMetricFilter(prev => prev === 'delayed' ? 'all' : 'delayed')}
+          className={`cursor-pointer bg-white rounded-2xl p-4 border transition-all duration-200 flex items-center justify-between select-none ${
+            selectedMetricFilter === 'delayed'
+              ? 'ring-2 ring-amber-500 border-amber-300 bg-amber-50/20 shadow-xs scale-[1.02]'
+              : 'border-slate-200 hover:border-amber-300 hover:shadow-xs hover:scale-[1.01]'
+          }`}
+        >
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600">Demorados (+4 días)</span>
+              {selectedMetricFilter === 'delayed' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              )}
+            </div>
+            <p className="text-2xl font-black text-amber-600 mt-0.5">{alertsSummary.delayed}</p>
+            <span className="text-[10px] text-slate-500 leading-none block mt-1">Posts estancados en alguna etapa</span>
+          </div>
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-bold transition-colors ${
+            selectedMetricFilter === 'delayed' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-600'
+          }`}>
+            <Clock className="w-4.5 h-4.5" />
+          </div>
+        </div>
+
       </div>
 
       {/* RUTA JERÁRQUICA: Clientes -> Cliente Seleccionado -> ODTs -> ODT Seleccionada */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs font-bold flex-wrap">
           <button
-            onClick={() => { onSelectClient(null); onSelectOdt(null); }}
+            onClick={() => { onSelectClient(null); onSelectOdt(null); setSelectedMetricFilter('all'); }}
             className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
               !selectedClientId 
                 ? 'bg-slate-900 text-white' 
@@ -233,7 +355,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
             <>
               <ChevronRight className="w-4 h-4 text-slate-400" />
               <button
-                onClick={() => onSelectOdt(null)}
+                onClick={() => { onSelectOdt(null); setSelectedMetricFilter('all'); }}
                 className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
                   selectedClientId && !selectedOdtId 
                     ? 'bg-indigo-600 text-white' 
