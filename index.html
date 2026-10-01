@@ -1,0 +1,90 @@
+
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>APC Enterprise ODT System</title>
+    <meta name="description" content="Sistema de gestión y producción de ODT y Parrillas de contenidos para APC Publicidad: flujo operativo ISO, aprobaciones y publicación." />
+    <meta property="og:title" content="APC Enterprise ODT System" />
+    <meta property="og:description" content="Sistema de gestión y producción de ODT y Parrillas de contenidos para APC Publicidad: flujo operativo ISO, aprobaciones y publicación." />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/quill@2.0.2/dist/quill.snow.css">
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&family=JetBrains+Mono:wght@700&display=swap');
+      
+      body { 
+        font-family: 'Plus Jakarta Sans', sans-serif; 
+        min-height: 100vh;
+      }
+      
+      .font-mono {
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #e2e8f0;
+        border-radius: 10px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #cbd5e1;
+      }
+
+      .odt-card-shadow {
+        box-shadow: 0 10px 40px -10px rgba(0,0,0,0.05);
+      }
+
+      /* Ajustes para el editor Quill */
+      .quill {
+        background: white;
+        border-radius: 24px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .ql-toolbar.ql-snow {
+        border: none !important;
+        background: #f8fafc;
+        border-bottom: 1px solid #e2e8f0 !important;
+        padding: 12px !important;
+      }
+      .ql-container.ql-snow {
+        border: none !important;
+        flex: 1;
+        font-family: inherit;
+        font-size: 14px;
+      }
+      .ql-editor {
+        min-height: 350px;
+        padding: 24px !important;
+      }
+      
+      /* Soporte visual para tablas en el editor */
+      .ql-editor table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 1em;
+      }
+      .ql-editor td, .ql-editor th {
+        border: 1px solid #ddd;
+        padding: 8px;
+        min-width: 20px;
+      }
+    </style>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

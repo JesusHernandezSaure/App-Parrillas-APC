@@ -1,0 +1,147 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account representation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "clientId": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "phone": { "type": "string" },
+        "cargo": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "horarioAtencion": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "username", "name", "role"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Brand or account manager entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ejecutivoId": { "type": "string" },
+        "ejecutivoName": { "type": "string" },
+        "ejecutivoEmail": { "type": "string" },
+        "ejecutivoPhone": { "type": "string" },
+        "ejecutivoCargo": { "type": "string" },
+        "ejecutivoWhatsapp": { "type": "string" },
+        "ejecutivoHorario": { "type": "string" },
+        "clientUserIds": { "type": "array" },
+        "status": { "type": "string", "enum": ["Activo", "Inactivo"] },
+        "createdAt": { "type": "string" },
+        "industry": { "type": "string" }
+      },
+      "required": ["id", "name", "ejecutivoId", "ejecutivoName", "clientUserIds", "status", "createdAt"]
+    },
+    "ODT": {
+      "title": "ODT",
+      "description": "Orden de Trabajo (Parrilla Group)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "numeroODT": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "nombreParrilla": { "type": "string" },
+        "mesPeriodo": { "type": "string" },
+        "brief": { "type": "string" },
+        "objetivo": { "type": "string" },
+        "redesSociales": { "type": "array" },
+        "ejecutivoId": { "type": "string" },
+        "ejecutivoName": { "type": "string" },
+        "fechaInicio": { "type": "string" },
+        "fechaObjetivo": { "type": "string" },
+        "requiereMedico": { "type": "boolean" },
+        "requiereArte": { "type": "boolean" },
+        "requiereAudioVideo": { "type": "boolean" },
+        "communityId": { "type": "string" },
+        "communityName": { "type": "string" },
+        "correctorId": { "type": "string" },
+        "correctorName": { "type": "string" },
+        "medicoId": { "type": "string" },
+        "medicoName": { "type": "string" },
+        "disenadorId": { "type": "string" },
+        "disenadorName": { "type": "string" },
+        "editorAvId": { "type": "string" },
+        "editorAvName": { "type": "string" },
+        "estadoGeneral": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "estadoAprobacionCopy": { "type": "string" },
+        "estadoAprobacionMaterial": { "type": "string" },
+        "rondasAprobacion": { "type": "array" }
+      },
+      "required": ["id", "numeroODT", "clientId", "clientName", "nombreParrilla", "mesPeriodo", "ejecutivoId", "ejecutivoName", "communityId", "communityName", "correctorId", "correctorName", "estadoGeneral", "createdAt"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "Publication post inside ODT",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "numeroInterno": { "type": "string" },
+        "odtId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "redSocial": { "type": "string" },
+        "fechaPrevista": { "type": "string" },
+        "fechaEntregaMaterial": { "type": "string" },
+        "tipoMaterial": { "type": "string" },
+        "dimensiones": { "type": "string" },
+        "nivelPrioridad": { "type": "string" },
+        "copyIn": { "type": "string" },
+        "copyOut": { "type": "string" },
+        "enlaceReferencia": { "type": "string" },
+        "enlaceMaterialFinal": { "type": "string" },
+        "areaResponsable": { "type": "string" },
+        "responsableActualId": { "type": "string" },
+        "responsableActualName": { "type": "string" },
+        "estado": { "type": "string" },
+        "comentarios": { "type": "array" },
+        "historial": { "type": "array" },
+        "aprobacionMedica": { "type": "object" },
+        "aprobacionCorreccionCopy": { "type": "object" },
+        "aprobacionClienteCopy": { "type": "object" },
+        "aprobacionCorreccionMaterial": { "type": "object" },
+        "aprobacionMedicaMaterial": { "type": "object" },
+        "aprobacionInternaFinal": { "type": "object" },
+        "aprobacionClienteMaterial": { "type": "object" },
+        "requiereRevisionMedicaMaterial": { "type": "boolean" },
+        "publicado": { "type": "boolean" },
+        "programado": { "type": "boolean" },
+        "fechaProgramada": { "type": "string" },
+        "plataformaProgramacion": { "type": "string" },
+        "fechaRealPublicacion": { "type": "string" },
+        "urlPublicacion": { "type": "string" },
+        "enlacesPublicacion": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "numeroInterno", "odtId", "clientId", "redSocial", "fechaPrevista", "tipoMaterial", "copyIn", "copyOut", "areaResponsable", "estado", "comentarios", "historial", "publicado", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles collection"
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Brand and clients collection"
+    },
+    "/odts/{odtId}": {
+      "schema": "ODT",
+      "description": "Order of Work collection"
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Post items collection"
+    }
+  }
+}

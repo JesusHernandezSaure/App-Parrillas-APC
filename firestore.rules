@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Collections rules
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    match /clients/{clientId} {
+      allow read, write: if true;
+    }
+
+    match /odts/{odtId} {
+      allow read, write: if true;
+    }
+
+    match /posts/{postId} {
+      allow read, write: if true;
+    }
+  }
+}
