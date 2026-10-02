@@ -200,11 +200,119 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleDeleteUser = (userId: string) => {
-    const updated = users.filter(u => u.id !== userId);
-    setUsers(updated);
-    saveStoredUsers(updated);
+  const handleDeleteUser = (
+    userId: string,
+    action: 'reassign' | 'cascade' | 'vacant' = 'vacant',
+    reassignToId?: string
+  ) => {
+    // 1. Eliminar al usuario
+    const updatedUsers = users.filter(u => u.id !== userId);
+    setUsers(updatedUsers);
+    saveStoredUsers(updatedUsers);
     dbDelete('users', userId);
+
+    const reassignee = users.find(u => u.id === reassignToId);
+
+    if (action === 'reassign' && reassignee) {
+      // Reasignar Clientes
+      const updatedClients = clients.map(c => {
+        if (c.ejecutivoId === userId) {
+          const updated = { ...c, ejecutivoId: reassignee.id, ejecutivoName: reassignee.name };
+          dbSave('clients', c.id, updated);
+          return updated;
+        }
+        return c;
+      });
+      setClients(updatedClients);
+      saveStoredClients(updatedClients);
+
+      // Reasignar ODTs
+      const updatedOdts = odts.map(o => {
+        let isChanged = false;
+        const patch: Partial<ODT> = {};
+        if (o.communityId === userId) { patch.communityId = reassignee.id; patch.communityName = reassignee.name; isChanged = true; }
+        if (o.disenadorId === userId) { patch.disenadorId = reassignee.id; patch.disenadorName = reassignee.name; isChanged = true; }
+        if (o.correctorId === userId) { patch.correctorId = reassignee.id; patch.correctorName = reassignee.name; isChanged = true; }
+        if (o.medicoId === userId) { patch.medicoId = reassignee.id; patch.medicoName = reassignee.name; isChanged = true; }
+        if (o.editorAvId === userId) { patch.editorAvId = reassignee.id; patch.editorAvName = reassignee.name; isChanged = true; }
+        
+        if (isChanged) {
+          return { ...o, ...patch };
+        }
+        return o;
+      });
+      updateOdtsState(updatedOdts);
+
+      // Reasignar Posts
+      const updatedPosts = posts.map(p => {
+        if (p.responsableActualId === userId) {
+          return { ...p, responsableActualId: reassignee.id, responsableActualName: reassignee.name };
+        }
+        return p;
+      });
+      updatePostsState(updatedPosts);
+
+    } else if (action === 'cascade') {
+      // Eliminar en cascada todo lo del usuario
+      // Clientes asignados a este ejecutivo
+      const clientsToDelete = clients.filter(c => c.ejecutivoId === userId);
+      const updatedClients = clients.filter(c => c.ejecutivoId !== userId);
+      setClients(updatedClients);
+      saveStoredClients(updatedClients);
+      clientsToDelete.forEach(c => dbDelete('clients', c.id));
+
+      // ODTs asociadas
+      const updatedOdts = odts.filter(o => {
+        const isOwner = o.communityId === userId || o.disenadorId === userId || o.correctorId === userId || o.medicoId === userId || o.editorAvId === userId;
+        return !isOwner;
+      });
+      updateOdtsState(updatedOdts);
+
+      // Posts asociados
+      const updatedPosts = posts.filter(p => {
+        const hasOdt = updatedOdts.some(o => o.id === p.odtId);
+        const isResponsible = p.responsableActualId === userId;
+        return hasOdt && !isResponsible;
+      });
+      updatePostsState(updatedPosts);
+
+    } else if (action === 'vacant') {
+      // Dejar vacante ("Sin Asignar")
+      const updatedClients = clients.map(c => {
+        if (c.ejecutivoId === userId) {
+          const updated = { ...c, ejecutivoId: '', ejecutivoName: 'Sin Asignar' };
+          dbSave('clients', c.id, updated);
+          return updated;
+        }
+        return c;
+      });
+      setClients(updatedClients);
+      saveStoredClients(updatedClients);
+
+      const updatedOdts = odts.map(o => {
+        let isChanged = false;
+        const patch: Partial<ODT> = {};
+        if (o.communityId === userId) { patch.communityId = ''; patch.communityName = 'Sin Asignar'; isChanged = true; }
+        if (o.disenadorId === userId) { patch.disenadorId = ''; patch.disenadorName = 'Sin Asignar'; isChanged = true; }
+        if (o.correctorId === userId) { patch.correctorId = ''; patch.correctorName = 'Sin Asignar'; isChanged = true; }
+        if (o.medicoId === userId) { patch.medicoId = ''; patch.medicoName = 'Sin Asignar'; isChanged = true; }
+        if (o.editorAvId === userId) { patch.editorAvId = ''; patch.editorAvName = 'Sin Asignar'; isChanged = true; }
+        
+        if (isChanged) {
+          return { ...o, ...patch };
+        }
+        return o;
+      });
+      updateOdtsState(updatedOdts);
+
+      const updatedPosts = posts.map(p => {
+        if (p.responsableActualId === userId) {
+          return { ...p, responsableActualId: '', responsableActualName: 'Sin Asignar' };
+        }
+        return p;
+      });
+      updatePostsState(updatedPosts);
+    }
   };
 
   const handleSaveClient = (client: Client) => {
@@ -216,10 +324,19 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteClient = (clientId: string) => {
-    const updated = clients.filter(c => c.id !== clientId);
-    setClients(updated);
-    saveStoredClients(updated);
+    // 1. Eliminar cliente
+    const updatedClients = clients.filter(c => c.id !== clientId);
+    setClients(updatedClients);
+    saveStoredClients(updatedClients);
     dbDelete('clients', clientId);
+
+    // 2. Eliminar ODTs asociadas en cascada
+    const updatedOdts = odts.filter(o => o.clientId !== clientId);
+    updateOdtsState(updatedOdts);
+
+    // 3. Eliminar Posts asociados en cascada
+    const updatedPosts = posts.filter(p => p.clientId !== clientId);
+    updatePostsState(updatedPosts);
   };
 
   const handleSaveOdt = (odt: ODT) => {

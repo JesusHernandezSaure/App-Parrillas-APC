@@ -17,7 +17,7 @@ interface SuperAdminViewProps {
   odts: ODT[];
   posts: Post[];
   onSaveUser: (user: User) => void;
-  onDeleteUser: (userId: string) => void;
+  onDeleteUser: (userId: string, action: 'reassign' | 'cascade' | 'vacant', reassignToId?: string) => void;
   onSaveClient: (client: Client) => void;
   onDeleteClient: (clientId: string) => void;
   onSaveOdt: (odt: ODT) => void;
@@ -71,6 +71,24 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [clientFormData, setClientFormData] = useState<Partial<Client>>({});
+
+  // Offboarding states for user deletions
+  const [offboardingUser, setOffboardingUser] = useState<User | null>(null);
+  const [offboardAction, setOffboardAction] = useState<'reassign' | 'cascade' | 'vacant'>('reassign');
+  const [offboardReassignToId, setOffboardReassignToId] = useState<string>('');
+
+  // Custom confirm modal state to replace blocked window.confirm in iframe sandbox
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
 
   // Filtros de ODTs y Posts
   const [odtSearch, setOdtSearch] = useState('');
@@ -535,9 +553,10 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                             {!isSuper && (
                               <button
                                 onClick={() => {
-                                  if (confirm(`¿Eliminar al usuario ${u.name}? Esta acción es irreversible.`)) {
-                                    onDeleteUser(u.id);
-                                  }
+                                  const alternativeUsers = users.filter(usr => usr.id !== u.id && usr.role !== 'Cliente');
+                                  setOffboardReassignToId(alternativeUsers[0]?.id || '');
+                                  setOffboardAction('reassign');
+                                  setOffboardingUser(u);
                                 }}
                                 title="Eliminar Usuario"
                                 className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
@@ -599,9 +618,15 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          if (confirm(`¿Eliminar la empresa ${client.name}?`)) {
-                            onDeleteClient(client.id);
-                          }
+                          setConfirmModal({
+                            isOpen: true,
+                            title: '¿Eliminar Empresa / Cliente?',
+                            message: `¿Estás seguro de que deseas eliminar la empresa "${client.name}"? Esta acción eliminará en cascada todas sus ODTs/Parrillas y todos sus posts asociados de forma irreversible.`,
+                            onConfirm: () => {
+                              onDeleteClient(client.id);
+                              setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                            }
+                          });
                         }}
                         className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer"
                         title="Eliminar Cliente"
@@ -728,9 +753,15 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                               </button>
                               <button
                                 onClick={() => {
-                                  if (confirm(`¿Eliminar la ODT ${odt.nombreParrilla} y sus posts?`)) {
-                                    onDeleteOdt(odt.id);
-                                  }
+                                  setConfirmModal({
+                                    isOpen: true,
+                                    title: '¿Eliminar ODT / Parrilla?',
+                                    message: `¿Estás seguro de que deseas eliminar la ODT "${odt.nombreParrilla}"? Esto eliminará también todas sus publicaciones y posts asociados de forma irreversible.`,
+                                    onConfirm: () => {
+                                      onDeleteOdt(odt.id);
+                                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                    }
+                                  });
                                 }}
                                 title="Eliminar ODT"
                                 className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
@@ -878,9 +909,15 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
                             <button
                               onClick={() => {
-                                if (confirm(`¿Eliminar el Post #${post.numeroInterno}?`)) {
-                                  onDeletePost(post.id);
-                                }
+                                setConfirmModal({
+                                  isOpen: true,
+                                  title: '¿Eliminar Publicación / Post?',
+                                  message: `¿Estás seguro de que deseas eliminar el post #${post.numeroInterno} (${post.redSocial})? Esta acción es irreversible.`,
+                                  onConfirm: () => {
+                                    onDeletePost(post.id);
+                                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                  }
+                                });
                               }}
                               title="Eliminar Post"
                               className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
@@ -1497,6 +1534,220 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Reusable, Sandbox-Friendly Custom Confirm Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 flex items-start gap-4">
+              <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-1.5 flex-1">
+                <h3 className="text-sm font-black text-slate-900">
+                  {confirmModal.title || 'Confirmar Acción'}
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {confirmModal.message}
+                </p>
+              </div>
+            </div>
+            
+            <div className="px-5 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer select-none"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  confirmModal.onConfirm();
+                }}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl shadow-md transition-colors cursor-pointer select-none"
+              >
+                Confirmar Eliminación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE BAJA DE PERSONAL Y REASIGNACIÓN (OFFBOARDING) */}
+      {offboardingUser && (() => {
+        const assignedClients = clients.filter(c => c.ejecutivoId === offboardingUser.id);
+        const assignedOdts = odts.filter(o => 
+          o.communityId === offboardingUser.id || 
+          o.disenadorId === offboardingUser.id || 
+          o.correctorId === offboardingUser.id || 
+          o.medicoId === offboardingUser.id || 
+          o.editorAvId === offboardingUser.id
+        );
+        const assignedPosts = posts.filter(p => p.responsableActualId === offboardingUser.id);
+        const totalAssignments = assignedClients.length + assignedOdts.length + assignedPosts.length;
+        const alternativeUsers = users.filter(u => u.id !== offboardingUser.id && u.role !== 'Cliente' && u.isActive !== false);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-150">
+              {/* Header */}
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center font-bold shadow-sm">
+                    <UserCheck className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900">
+                      Baja de Personal e Integridad Operativa
+                    </h3>
+                    <p className="text-[11px] text-slate-500">Plan de sucesión y reasignación de cuentas.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setOffboardingUser(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-5 text-xs text-slate-600">
+                <p className="leading-relaxed">
+                  Estás a punto de dar de baja al usuario <strong>{offboardingUser.name}</strong> ({offboardingUser.role}) de la base de datos de APC Publicidad.
+                </p>
+
+                {totalAssignments > 0 ? (
+                  <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                      <AlertTriangle className="w-4.5 h-4.5 text-amber-600" />
+                      <span>Registros y asignaciones activas detectadas:</span>
+                    </div>
+                    <ul className="list-disc pl-5 space-y-1 font-medium text-amber-800">
+                      {assignedClients.length > 0 && <li><strong>{assignedClients.length}</strong> Cliente(s) bajo su cuenta de Ejecutivo.</li>}
+                      {assignedOdts.length > 0 && <li><strong>{assignedOdts.length}</strong> ODTs / Parrillas activas asignadas en su equipo.</li>}
+                      {assignedPosts.length > 0 && <li><strong>{assignedPosts.length}</strong> Publicación(es) bajo su responsabilidad operativa actual.</li>}
+                    </ul>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 font-medium">
+                    ✨ Este usuario no tiene asignaciones activas en clientes, ODTs o posts. Se puede eliminar de forma totalmente segura e inmediata.
+                  </div>
+                )}
+
+                {totalAssignments > 0 && (
+                  <div className="space-y-4 pt-1">
+                    <span className="font-bold text-slate-800 block border-b border-slate-100 pb-2">Selecciona un método de offboarding:</span>
+                    
+                    <div className="space-y-3">
+                      {/* Opción 1: Reasignar todo */}
+                      <label className="flex items-start gap-3 p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl cursor-pointer transition-colors">
+                        <input
+                          type="radio"
+                          name="offboardAction"
+                          checked={offboardAction === 'reassign'}
+                          onChange={() => setOffboardAction('reassign')}
+                          className="mt-1 h-4 w-4 text-indigo-600 border-slate-300 focus:ring-indigo-500 focus:outline-hidden"
+                        />
+                        <div className="space-y-1 flex-1">
+                          <span className="font-bold text-slate-800 block">Reasignar cuentas y trabajo a otro usuario (Recomendado)</span>
+                          <span className="text-slate-500 text-[11px] block leading-relaxed">
+                            Transfiere todos sus clientes, ODTs y tareas activas a otro especialista para garantizar la continuidad bajo ISO 9001.
+                          </span>
+                          
+                          {offboardAction === 'reassign' && (
+                            <div className="pt-2">
+                              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Usuario que asume las cuentas:</label>
+                              {alternativeUsers.length > 0 ? (
+                                <select
+                                  value={offboardReassignToId}
+                                  onChange={(e) => setOffboardReassignToId(e.target.value)}
+                                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:outline-hidden text-xs"
+                                >
+                                  {alternativeUsers.map(usr => (
+                                    <option key={usr.id} value={usr.id}>[{usr.role}] {usr.name}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="text-rose-500 italic block text-[11px]">No hay otros usuarios disponibles para asumir estas cuentas. Agrega un usuario de relevo primero.</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </label>
+
+                      {/* Opción 2: Dejar vacante */}
+                      <label className="flex items-start gap-3 p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl cursor-pointer transition-colors">
+                        <input
+                          type="radio"
+                          name="offboardAction"
+                          checked={offboardAction === 'vacant'}
+                          onChange={() => setOffboardAction('vacant')}
+                          className="mt-1 h-4 w-4 text-slate-600 border-slate-300 focus:ring-slate-500 focus:outline-hidden"
+                        />
+                        <div className="space-y-1 flex-1">
+                          <span className="font-bold text-slate-800 block">Mantener registros y dejar vacante ("Sin Asignar")</span>
+                          <span className="text-slate-500 text-[11px] block leading-relaxed">
+                            Mantiene las ODTs, clientes y posts intactos, pero los reetiqueta temporalmente como "Sin Asignar" para decidir el relevo más tarde.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* Opción 3: Eliminar todo en cascada */}
+                      <label className="flex items-start gap-3 p-3 bg-rose-50/20 hover:bg-rose-50/40 border border-rose-100 rounded-xl cursor-pointer transition-colors">
+                        <input
+                          type="radio"
+                          name="offboardAction"
+                          checked={offboardAction === 'cascade'}
+                          onChange={() => setOffboardAction('cascade')}
+                          className="mt-1 h-4 w-4 text-rose-600 border-rose-300 focus:ring-rose-500 focus:outline-hidden"
+                        />
+                        <div className="space-y-1 flex-1">
+                          <span className="font-bold text-rose-800 block">Eliminar TODO lo asociado en cascada (¡Peligro!)</span>
+                          <span className="text-rose-600/80 text-[11px] block leading-relaxed">
+                            Elimina permanentemente a este usuario y purga de la base de datos todos sus clientes, ODTs/Parrillas y sus posts creados. ¡Acción irreversible!
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setOffboardingUser(null)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (offboardAction === 'reassign' && !offboardReassignToId && totalAssignments > 0) {
+                      alert('Por favor selecciona un usuario de reemplazo.');
+                      return;
+                    }
+                    onDeleteUser(offboardingUser.id, offboardAction, offboardAction === 'reassign' ? offboardReassignToId : undefined);
+                    setOffboardingUser(null);
+                  }}
+                  className={`px-5 py-2 font-black rounded-xl shadow-md transition-all cursor-pointer ${
+                    offboardAction === 'cascade' && totalAssignments > 0
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                      : 'bg-slate-900 hover:bg-slate-800 text-white'
+                  }`}
+                >
+                  {totalAssignments === 0 ? 'Eliminar Usuario' : 'Confirmar Acción de Baja'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
