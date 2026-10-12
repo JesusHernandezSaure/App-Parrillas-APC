@@ -101,8 +101,8 @@ export const App: React.FC = () => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Usuario activo (Por defecto: Super Admin para tener el control total inmediato)
-  const [currentUser, setCurrentUser] = useState<User>(() => {
+  // Usuario autenticado originalmente por login
+  const [authenticatedUser, setAuthenticatedUser] = useState<User>(() => {
     const loaded = getStoredUsers();
     const savedUserId = localStorage.getItem('apc_logged_user_id');
     if (savedUserId) {
@@ -118,8 +118,36 @@ export const App: React.FC = () => {
     };
   });
 
-  // Vista simulada para Super Admin
+  // Usuario activo en la interfaz (solo Super Admin puede simular a otro usuario)
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const loaded = getStoredUsers();
+    const savedUserId = localStorage.getItem('apc_logged_user_id');
+    const matchedAuth = savedUserId ? loaded.find(u => u.id === savedUserId) : loaded[0];
+    const authUser = matchedAuth || loaded[0];
+    
+    // Si el usuario autenticado es Super Admin, puede tener un perfil simulado
+    if (authUser?.role === 'Super Admin') {
+      const simulatedId = localStorage.getItem('apc_simulated_user_id');
+      if (simulatedId) {
+        const matchedSim = loaded.find(u => u.id === simulatedId);
+        if (matchedSim) return matchedSim;
+      }
+    }
+    return authUser || {
+      id: 'u1',
+      name: 'Dirección General (Super Admin)',
+      role: 'Super Admin',
+      email: 'superadmin@apcpublicidad.com',
+      username: 'superadmin'
+    };
+  });
+
+  // Vista simulada por rol exclusiva para Super Admin
   const [superAdminRoleView, setSuperAdminRoleView] = useState<UserRole | null>(null);
+
+  // Verificación estricta de privilegios de simulación (SOLO SUPER ADMIN)
+  const isSuperAdmin = authenticatedUser.role === 'Super Admin';
+  const isSimulating = isSuperAdmin && (currentUser.id !== authenticatedUser.id || superAdminRoleView !== null);
 
   // Navegación en vista de ejecutivo
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -197,6 +225,9 @@ export const App: React.FC = () => {
     dbSave('users', user.id, user);
     if (currentUser.id === user.id) {
       setCurrentUser(user);
+    }
+    if (authenticatedUser.id === user.id) {
+      setAuthenticatedUser(user);
     }
   };
 
@@ -1247,7 +1278,10 @@ export const App: React.FC = () => {
         return;
       }
       console.log("Login successful! Logged in as:", foundUser.name);
+      setAuthenticatedUser(foundUser);
       setCurrentUser(foundUser);
+      setSuperAdminRoleView(null);
+      localStorage.removeItem('apc_simulated_user_id');
       setIsLoggedIn(true);
       localStorage.setItem('apc_is_logged_in', 'true');
       localStorage.setItem('apc_logged_user_id', foundUser.id);
@@ -1377,41 +1411,61 @@ export const App: React.FC = () => {
     );
   }
 
-  const effectiveRole = (currentUser.role === 'Super Admin' && superAdminRoleView) 
+  const effectiveRole = (isSuperAdmin && superAdminRoleView) 
     ? superAdminRoleView 
     : currentUser.role;
+
+  const handleExitSimulation = () => {
+    setCurrentUser(authenticatedUser);
+    setSuperAdminRoleView(null);
+    localStorage.removeItem('apc_simulated_user_id');
+  };
+
+  const handleSwitchUser = (user: User) => {
+    // Exclusivo para Super Admin: ningún otro rol puede simular usuarios
+    if (!isSuperAdmin) return;
+
+    if (user.id === authenticatedUser.id) {
+      handleExitSimulation();
+    } else {
+      setCurrentUser(user);
+      setSuperAdminRoleView(null);
+      localStorage.setItem('apc_simulated_user_id', user.id);
+      if (user.role === 'Cliente' && user.clientId) {
+        setSelectedClientId(user.clientId);
+      }
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-800 flex flex-col font-sans antialiased">
       
-      {/* Barra de Navegación con Conmutador de Roles */}
+      {/* Barra de Navegación con Conmutador de Roles (Exclusivo Super Admin) */}
       <Navbar
         currentUser={currentUser}
+        authenticatedUser={authenticatedUser}
         allUsers={users}
-        onSwitchUser={(user) => {
-          setCurrentUser(user);
-          setSuperAdminRoleView(null);
-          // Si pasa a cliente, enfocar a su cliente
-          if (user.role === 'Cliente' && user.clientId) {
-            setSelectedClientId(user.clientId);
-          }
-        }}
+        isSuperAdmin={isSuperAdmin}
+        isSimulating={isSimulating}
+        onSwitchUser={handleSwitchUser}
+        onExitSimulation={handleExitSimulation}
         onLogout={() => {
           setIsLoggedIn(false);
           localStorage.removeItem('apc_is_logged_in');
           localStorage.removeItem('apc_logged_user_id');
+          localStorage.removeItem('apc_simulated_user_id');
           setSuperAdminRoleView(null);
         }}
         clientName={currentClient?.name}
-        onOpenSuperAdminPanel={() => setSuperAdminRoleView(null)}
+        onOpenSuperAdminPanel={handleExitSimulation}
         activeViewRole={superAdminRoleView || currentUser.role}
       />
 
       {/* Contenido Principal por Rol */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
-        {/* Banner de simulación activa para Super Admin */}
-        {currentUser.role === 'Super Admin' && superAdminRoleView && (
+        {/* Banner de simulación activa (EXCLUSIVO PARA SUPER ADMIN) */}
+        {isSuperAdmin && isSimulating && (
           <div 
             style={{ backgroundColor: '#f59e0b' }}
             className="mb-6 bg-amber-500 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 p-3.5 rounded-2xl font-bold text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md border border-amber-400"
@@ -1421,15 +1475,20 @@ export const App: React.FC = () => {
                 <Crown className="w-4 h-4 fill-amber-400" />
               </div>
               <div>
-                <span className="font-extrabold uppercase tracking-wide text-[11px] block">Modo Super Admin Activo</span>
+                <span className="font-extrabold uppercase tracking-wide text-[11px] block">Modo Simulación de Perfil (Solo Super Admin)</span>
                 <span className="font-medium text-slate-900 text-xs">
-                  Viendo interfaz operativa de: <strong>{superAdminRoleView}</strong> (Conserva permisos de super-aprobación y bypass).
+                  {superAdminRoleView ? (
+                    <>Viendo la interfaz operativa de: <strong>{superAdminRoleView}</strong>.</>
+                  ) : (
+                    <>Viendo la interfaz como: <strong>[{currentUser.role}] {currentUser.name}</strong> (@{currentUser.username}).</>
+                  )}{' '}
+                  Tu sesión autenticada de Super Admin sigue activa en segundo plano.
                 </span>
               </div>
             </div>
             <button
-              onClick={() => setSuperAdminRoleView(null)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-950 text-white font-extrabold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer text-xs shrink-0 self-start sm:self-auto"
+              onClick={handleExitSimulation}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-950 text-white font-extrabold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer text-xs shrink-0 self-start sm:self-auto shadow-sm"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Volver a Consola Super Admin</span>
@@ -1438,7 +1497,7 @@ export const App: React.FC = () => {
         )}
 
         {/* VISTA 0: SUPER ADMIN HUB (CONTROL TOTAL) */}
-        {currentUser.role === 'Super Admin' && !superAdminRoleView && (
+        {isSuperAdmin && !isSimulating && (
           <SuperAdminView
             currentUser={currentUser}
             users={users}
@@ -1468,13 +1527,7 @@ export const App: React.FC = () => {
               setCreatePostOdt(odt);
               setIsCreatePostOpen(true);
             }}
-            onSwitchUser={(user) => {
-              setCurrentUser(user);
-              setSuperAdminRoleView(null);
-              if (user.role === 'Cliente' && user.clientId) {
-                setSelectedClientId(user.clientId);
-              }
-            }}
+            onSwitchUser={handleSwitchUser}
             onSuperApprovePost={handleSuperApprovePost}
             onOpenIntervention={(post) => {
               setActiveModalPost(post);

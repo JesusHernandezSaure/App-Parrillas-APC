@@ -7,8 +7,12 @@ import {
 
 interface NavbarProps {
   currentUser: User;
+  authenticatedUser: User;
   allUsers: User[];
+  isSuperAdmin: boolean;
+  isSimulating: boolean;
   onSwitchUser: (user: User) => void;
+  onExitSimulation: () => void;
   onLogout: () => void;
   clientName?: string;
   onOpenSuperAdminPanel?: () => void;
@@ -17,8 +21,12 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
+  authenticatedUser,
   allUsers,
+  isSuperAdmin,
+  isSimulating,
   onSwitchUser,
+  onExitSimulation,
   onLogout,
   clientName,
   onOpenSuperAdminPanel,
@@ -71,41 +79,56 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-            {/* Botón Panel Super Admin */}
-            {(currentUser.role === 'Super Admin' || currentUser.role === 'Admin') && onOpenSuperAdminPanel && (
+          <div className="flex items-center gap-3">
+            {/* Botón Panel Super Admin (Solo para Super Admin) */}
+            {isSuperAdmin && onOpenSuperAdminPanel && (
               <button
                 onClick={onOpenSuperAdminPanel}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-xs transition-colors cursor-pointer"
                 title="Abrir Panel de Super Administrador (Control Total)"
               >
-                <Crown className="w-3.5 h-3.5 fill-white" />
+                <Crown className="w-3.5 h-3.5 fill-slate-950" />
                 <span>Panel Super Admin</span>
               </button>
             )}
 
-            {/* Selector de Perfil Rápido (Para pruebas de todos los roles) */}
-          <div className="flex items-center gap-3">
-            <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1">
-              <label htmlFor="user-select" className="text-xs font-semibold text-slate-500 px-2 flex items-center gap-1">
-                <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-                <span className="hidden md:inline">Simular Perfil:</span>
-              </label>
-              <select
-                id="user-select"
-                className="text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-md py-1.5 pl-2 pr-7 cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
-                value={currentUser.id}
-                onChange={(e) => {
-                  const target = allUsers.find(u => u.id === e.target.value);
-                  if (target) onSwitchUser(target);
-                }}
-              >
-                {allUsers.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    [{u.role}] {u.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Selector de Perfil Rápido - EXCLUSIVO PARA SUPER ADMIN */}
+            {isSuperAdmin && (
+              <div className="flex items-center gap-2">
+                <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1">
+                  <label htmlFor="user-select" className="text-xs font-semibold text-slate-500 px-2 flex items-center gap-1">
+                    <UserCheck className="w-3.5 h-3.5 text-amber-500" />
+                    <span className="hidden md:inline font-bold text-slate-700">Simular Perfil:</span>
+                  </label>
+                  <select
+                    id="user-select"
+                    className="text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-md py-1.5 pl-2 pr-7 cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                    value={currentUser.id}
+                    onChange={(e) => {
+                      const target = allUsers.find(u => u.id === e.target.value);
+                      if (target) onSwitchUser(target);
+                    }}
+                  >
+                    {allUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        [{u.role}] {u.name} {u.id === authenticatedUser.id ? '★ (Super Admin)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {isSimulating && (
+                  <button
+                    onClick={onExitSimulation}
+                    className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-extrabold text-xs transition-colors cursor-pointer shadow-2xs"
+                    title="Salir de la simulación y regresar a la vista de Super Admin"
+                  >
+                    <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
+                    <span>Salir de Simulación</span>
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Usuario Actual */}
             <div className="hidden lg:flex items-center gap-2.5 pl-3 border-l border-slate-200">
@@ -130,6 +153,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
                 {currentUser.role === 'Cliente' && clientName ? (
                   <span className="text-[11px] text-cyan-700 font-medium">{clientName}</span>
+                ) : isSimulating ? (
+                  <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1">
+                    <Crown className="w-2.5 h-2.5 fill-amber-500" />
+                    <span>Simulación Super Admin</span>
+                  </span>
                 ) : (
                   <span className="text-[11px] text-slate-500">{currentUser.username}</span>
                 )}
