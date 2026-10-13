@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Post, ODT, MaterialType, PostDimensions, PriorityLevel, User } from '../types';
-import { Sparkles, X, Plus, ExternalLink, Send, Calendar, Clock, Layers, AlertCircle } from 'lucide-react';
+import { Sparkles, X, Plus, ExternalLink, Send, Calendar, Clock, Layers, AlertCircle, Palette } from 'lucide-react';
 
 interface CreatePostModalProps {
   odt: ODT;
@@ -17,6 +17,11 @@ const DIMENSION_OPTIONS: { id: PostDimensions; label: string; desc: string }[] =
     id: '1080x1080 (1:1 Cuadrado)', 
     label: '1:1 Cuadrado (1080 × 1080 px)', 
     desc: 'Feed principal de Instagram, Facebook y LinkedIn' 
+  },
+  { 
+    id: '1080x1350 (4:5 Vertical)', 
+    label: '4:5 Vertical (1080 × 1350 px)', 
+    desc: 'Feed vertical Instagram y FB (Mayor presencia móvil)' 
   },
   { 
     id: '1080x1920 (9:16 Vertical / Reels)', 
@@ -68,12 +73,24 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   const [copyOut, setCopyOut] = useState('');
   const [enlaceReferencia, setEnlaceReferencia] = useState('');
 
-  // Auto-ajustar sugerencia de dimensiones si cambia a Video
+  // Para videos: detección inteligente si la ODT/cliente es Telefém
+  const isTelefemOdt = Boolean(
+    odt?.clientName?.toLowerCase().includes('telefem') || 
+    odt?.nombreParrilla?.toLowerCase().includes('telefem')
+  );
+  const [requiereArtePrevio, setRequiereArtePrevio] = useState<boolean>(() => isTelefemOdt);
+
+  // Auto-ajustar sugerencia de dimensiones si cambia a Video y pre-activar editables si es Telefém
   useEffect(() => {
-    if (tipoMaterial === 'Video' && dimensiones === '1080x1080 (1:1 Cuadrado)') {
-      setDimensiones('1080x1920 (9:16 Vertical / Reels)');
+    if (tipoMaterial === 'Video') {
+      if (dimensiones === '1080x1080 (1:1 Cuadrado)') {
+        setDimensiones('1080x1920 (9:16 Vertical / Reels)');
+      }
+      if (isTelefemOdt) {
+        setRequiereArtePrevio(true);
+      }
     }
-  }, [tipoMaterial]);
+  }, [tipoMaterial, isTelefemOdt]);
 
   const handlePubDateChange = (newDate: string) => {
     setFechaPrevista(newDate);
@@ -120,8 +137,11 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       nivelPrioridad,
       copyIn: copyIn.trim(),
       copyOut: copyOut.trim(),
-      enlaceReferencia: enlaceReferencia.trim(),
       enlaceMaterialFinal: '',
+      requiereArtePrevio: tipoMaterial === 'Video' ? requiereArtePrevio : false,
+      enlaceEditableArte: '',
+      notasArteParaVideo: '',
+      arteCompletado: false,
       areaResponsable: area,
       responsableActualId: respId,
       responsableActualName: respName,
@@ -224,9 +244,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           <div className="space-y-1.5 pt-1">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block flex items-center justify-between">
               <span>Tamaño / Medidas en Píxeles *</span>
-              <span className="text-[11px] text-slate-400 font-normal">Las 3 resoluciones estándar</span>
+              <span className="text-[11px] text-slate-400 font-normal">4 resoluciones estándar</span>
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
               {DIMENSION_OPTIONS.map((dim) => {
                 const isSelected = dimensiones === dim.id;
                 return (
@@ -250,6 +270,62 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               })}
             </div>
           </div>
+
+          {/* Opciones Específicas para Post de Video (Parrillas como Telefém u otras marcas) */}
+          {tipoMaterial === 'Video' && (
+            <div className={`p-4 rounded-2xl border transition-all ${
+              requiereArtePrevio 
+                ? 'bg-gradient-to-r from-purple-50/80 to-indigo-50/80 border-purple-300 ring-1 ring-purple-300/40' 
+                : 'bg-slate-50 border-slate-200'
+            }`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                    requiereArtePrevio ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    <Palette className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <label 
+                        onClick={() => setRequiereArtePrevio(!requiereArtePrevio)}
+                        className="text-xs font-bold text-slate-900 cursor-pointer"
+                      >
+                        ¿Este video requiere que Arte prepare diseño o editables previos?
+                      </label>
+                      {isTelefemOdt && (
+                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                          Recomendado Telefém
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed mt-0.5">
+                      Para parrillas como <strong>Telefém</strong> o videos con animaciones/ilustraciones que el equipo de <strong>Arte</strong> debe diseñar en capas antes de que <strong>Audio y Video</strong> anime.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                  <input 
+                    type="checkbox" 
+                    checked={requiereArtePrevio} 
+                    onChange={(e) => setRequiereArtePrevio(e.target.checked)} 
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+
+              {requiereArtePrevio && (
+                <div className="mt-3 pt-2.5 border-t border-purple-200/70 flex items-center gap-2 text-[11px] text-purple-950 font-medium bg-white/80 p-2.5 rounded-xl">
+                  <span className="w-2 h-2 rounded-full bg-purple-600 shrink-0"></span>
+                  <span>
+                    <strong>Flujo asignado:</strong> Copy Aprobado ➔ <strong>1. Arte diseña editables</strong> ➔ <strong>2. Audio y Video produce la animación</strong>.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Nivel de Importancia / Prioridad para Producción */}
           <div className="space-y-1.5 pt-1">

@@ -817,6 +817,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                 <option value="Revisión Médica">Revisión Médica</option>
                 <option value="Corrección de Copy">Corrección de Copy</option>
                 <option value="Aprobación Copy Cliente">Aprobación Copy Cliente</option>
+                <option value="Diseño de Editables (Arte)">Diseño de Editables (Arte)</option>
                 <option value="Producción Arte">Producción Arte</option>
                 <option value="Producción Audio/Video">Producción Audio/Video</option>
                 <option value="Corrección Material">Corrección Material</option>

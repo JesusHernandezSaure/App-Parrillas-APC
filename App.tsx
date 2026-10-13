@@ -110,11 +110,11 @@ export const App: React.FC = () => {
       if (matched) return matched;
     }
     return loaded[0] || {
-      id: 'u1',
-      name: 'Dirección General (Super Admin)',
+      id: 'u-jesus',
+      name: 'Jesús Hernández Saure',
       role: 'Super Admin',
-      email: 'superadmin@apcpublicidad.com',
-      username: 'superadmin'
+      email: 'jesus.hernandez@apcpublicidad.com',
+      username: 'jesus.apc'
     };
   });
 
@@ -134,11 +134,11 @@ export const App: React.FC = () => {
       }
     }
     return authUser || {
-      id: 'u1',
-      name: 'Dirección General (Super Admin)',
+      id: 'u-jesus',
+      name: 'Jesús Hernández Saure',
       role: 'Super Admin',
-      email: 'superadmin@apcpublicidad.com',
-      username: 'superadmin'
+      email: 'jesus.hernandez@apcpublicidad.com',
+      username: 'jesus.apc'
     };
   });
 
@@ -408,9 +408,23 @@ export const App: React.FC = () => {
       nextArea = 'Cliente';
       nextRespName = 'Cliente';
     } else if (post.estado === 'Aprobación Copy Cliente') {
-      nextStatus = isAudioVisual(post.tipoMaterial) ? 'Producción Audio/Video' : 'Producción Arte';
-      nextArea = isAudioVisual(post.tipoMaterial) ? 'Audio y Video' : 'Arte';
-      nextRespName = isAudioVisual(post.tipoMaterial) ? (odt?.editorAvName || 'Editor AV') : (odt?.disenadorName || 'Diseñador');
+      if (isAudioVisual(post.tipoMaterial) && post.requiereArtePrevio) {
+        nextStatus = 'Diseño de Editables (Arte)';
+        nextArea = 'Arte';
+        nextRespName = odt?.disenadorName || 'Diseñador';
+      } else if (isAudioVisual(post.tipoMaterial)) {
+        nextStatus = 'Producción Audio/Video';
+        nextArea = 'Audio y Video';
+        nextRespName = odt?.editorAvName || 'Editor AV';
+      } else {
+        nextStatus = 'Producción Arte';
+        nextArea = 'Arte';
+        nextRespName = odt?.disenadorName || 'Diseñador';
+      }
+    } else if (post.estado === 'Diseño de Editables (Arte)') {
+      nextStatus = 'Producción Audio/Video';
+      nextArea = 'Audio y Video';
+      nextRespName = odt?.editorAvName || 'Editor AV';
     } else if (post.estado === 'Producción Arte' || post.estado === 'Producción Audio/Video') {
       nextStatus = 'Corrección Material';
       nextArea = 'Corrección';
@@ -509,6 +523,9 @@ export const App: React.FC = () => {
         tipoMaterial: data.tipoMaterial !== undefined ? data.tipoMaterial : p.tipoMaterial,
         dimensiones: data.dimensiones !== undefined ? data.dimensiones : p.dimensiones,
         nivelPrioridad: data.nivelPrioridad !== undefined ? data.nivelPrioridad : p.nivelPrioridad,
+        requiereArtePrevio: data.requiereArtePrevio !== undefined ? data.requiereArtePrevio : p.requiereArtePrevio,
+        enlaceEditableArte: data.enlaceEditableArte !== undefined ? data.enlaceEditableArte : p.enlaceEditableArte,
+        notasArteParaVideo: data.notasArteParaVideo !== undefined ? data.notasArteParaVideo : p.notasArteParaVideo,
         historial: [historyEntry, ...p.historial],
         updatedAt: getNowTimestamp()
       };
@@ -665,7 +682,12 @@ export const App: React.FC = () => {
     } else if (type === 'cliente_copy') {
       patch.aprobacionClienteCopy = approvalRecord;
       if (isApproved) {
-        if (isAudioVisual(post.tipoMaterial)) {
+        if (isAudioVisual(post.tipoMaterial) && post.requiereArtePrevio) {
+          nextStatus = 'Diseño de Editables (Arte)';
+          nextArea = 'Arte';
+          nextRespName = odt.disenadorName || 'Diseñador';
+          nextRespId = odt.disenadorId || '';
+        } else if (isAudioVisual(post.tipoMaterial)) {
           nextStatus = 'Producción Audio/Video';
           nextArea = 'Audio y Video';
           nextRespName = odt.editorAvName || 'Editor AV';
@@ -838,6 +860,36 @@ export const App: React.FC = () => {
     updatePostsState(updated);
   };
 
+  // 6b. Diseñador de Arte entrega los materiales editables para animación/video (ej. Telefém)
+  const handleSubmitArteEditables = (post: Post, odt: ODT, editableUrl: string, notasArte?: string) => {
+    const nextStatus: PostStatus = 'Producción Audio/Video';
+    const intervention = createIntervention(
+      currentUser,
+      'Recursos Editables de Arte Entregados',
+      `Arte preparó y entregó los editables/ilustraciones para animación de Audio y Video.${notasArte ? ` Indicaciones: "${notasArte}"` : ''}`,
+      post.estado,
+      nextStatus
+    );
+
+    const updated = posts.map(p => {
+      if (p.id !== post.id) return p;
+      return {
+        ...p,
+        enlaceEditableArte: editableUrl,
+        notasArteParaVideo: notasArte || p.notasArteParaVideo,
+        arteCompletado: true,
+        estado: nextStatus,
+        areaResponsable: 'Audio y Video',
+        responsableActualName: odt.editorAvName || 'Editor AV',
+        responsableActualId: odt.editorAvId || '',
+        historial: [intervention, ...p.historial],
+        updatedAt: getNowTimestamp()
+      };
+    });
+
+    updatePostsState(updated);
+  };
+
   // 7. Community marca como PROGRAMADO o PUBLICADO con múltiples enlaces por red social
   const handlePublishPost = (
     post: Post,
@@ -995,7 +1047,7 @@ export const App: React.FC = () => {
       if (tipo === 'COPY') {
         // Si el post ya completó o superó la etapa de copy, NO regresarlo a Producción
         const isAlreadyPastCopy = [
-          'Producción Arte', 'Producción Audio/Video', 'Corrección Material',
+          'Diseño de Editables (Arte)', 'Producción Arte', 'Producción Audio/Video', 'Corrección Material',
           'Revisión Médica Material', 'Aprobación Interna Final',
           'Aprobación Material Cliente', 'Listo para Publicar', 'Programado', 'Publicado'
         ].includes(p.estado) || p.aprobacionClienteCopy?.status === 'Aprobado';
@@ -1010,7 +1062,12 @@ export const App: React.FC = () => {
         let nextRespName = targetOdt.disenadorName || 'Diseñador';
         let nextRespId = targetOdt.disenadorId || '';
 
-        if (isAudioVisual(p.tipoMaterial)) {
+        if (isAudioVisual(p.tipoMaterial) && p.requiereArtePrevio) {
+          nextStatus = 'Diseño de Editables (Arte)';
+          nextArea = 'Arte';
+          nextRespName = targetOdt.disenadorName || 'Diseñador';
+          nextRespId = targetOdt.disenadorId || '';
+        } else if (isAudioVisual(p.tipoMaterial)) {
           nextStatus = 'Producción Audio/Video';
           nextArea = 'Audio y Video';
           nextRespName = targetOdt.editorAvName || 'Editor AV';
@@ -1184,7 +1241,12 @@ export const App: React.FC = () => {
         let nextRespName = targetOdt.disenadorName || 'Diseñador';
         let nextRespId = targetOdt.disenadorId || '';
 
-        if (isAudioVisual(p.tipoMaterial)) {
+        if (isAudioVisual(p.tipoMaterial) && p.requiereArtePrevio) {
+          nextStatus = 'Diseño de Editables (Arte)';
+          nextArea = 'Arte';
+          nextRespName = targetOdt.disenadorName || 'Diseñador';
+          nextRespId = targetOdt.disenadorId || '';
+        } else if (isAudioVisual(p.tipoMaterial)) {
           nextStatus = 'Producción Audio/Video';
           nextArea = 'Audio y Video';
           nextRespName = targetOdt.editorAvName || 'Editor AV';
@@ -1367,39 +1429,47 @@ export const App: React.FC = () => {
               </div>
             </form>
 
-            {/* Ayuda para demostración/evaluación */}
+            {/* Ayuda con usuarios reales registrados */}
             <div className="mt-8 pt-6 border-t border-slate-700/60 text-xs">
               <details className="group cursor-pointer">
                 <summary className="flex justify-between items-center text-slate-400 font-bold hover:text-white select-none list-none">
-                  <span>🔑 Ver Credenciales de Demostración</span>
+                  <span>🔑 Ver Cuentas y Accesos Registrados</span>
                   <span className="transition group-open:rotate-180 text-amber-400">▼</span>
                 </summary>
                 <div style={{ backgroundColor: '#0f172a' }} className="mt-4 p-3 bg-slate-950 rounded-xl space-y-2 text-[11px] text-slate-300 border border-slate-800">
-                  <p className="font-semibold text-amber-400 border-b border-slate-800 pb-1">Ingresa con cualquiera de estos perfiles:</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <p className="font-semibold text-amber-400 border-b border-slate-800 pb-1">Perfiles activos en la plataforma:</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                     <div>
-                      <strong className="text-white block">Super Admin:</strong>
-                      <span>superadmin / 123</span>
+                      <strong className="text-white block">Super Admin (Dirección):</strong>
+                      <span>jesus.apc / admin</span>
                     </div>
                     <div>
-                      <strong className="text-white block">Ejecutiva:</strong>
-                      <span>ana.ejecutiva / 123</span>
+                      <strong className="text-white block">Super Admin (Dirección Gral):</strong>
+                      <span>catina.apc / 1234</span>
                     </div>
                     <div>
-                      <strong className="text-white block">Médico Revisor:</strong>
-                      <span>dr.garcia / 123</span>
+                      <strong className="text-white block">Ejecutivo de Cuentas:</strong>
+                      <span>brenda.sosa / 123</span>
+                    </div>
+                    <div>
+                      <strong className="text-white block">Médico (Medical Writer):</strong>
+                      <span>nadia.apc / 123</span>
                     </div>
                     <div>
                       <strong className="text-white block">Community Manager:</strong>
-                      <span>sofia.cm / 123</span>
+                      <span>bere.apc / 123 (o ricardo.apc / 123)</span>
                     </div>
                     <div>
-                      <strong className="text-white block">Diseñador Arte:</strong>
-                      <span>pedro.arte / 123</span>
+                      <strong className="text-white block">Arte / Diseño:</strong>
+                      <span>ania.jaime / 123</span>
                     </div>
                     <div>
-                      <strong className="text-white block">Cliente Sanitas:</strong>
-                      <span>cliente.sanitas / 123</span>
+                      <strong className="text-white block">Corrección / Calidad:</strong>
+                      <span>paty.apc / 123 (o sughey.apc / 123)</span>
+                    </div>
+                    <div>
+                      <strong className="text-white block">Audio y Video:</strong>
+                      <span>audioyvideo.apc / 123</span>
                     </div>
                   </div>
                 </div>
@@ -1672,6 +1742,7 @@ export const App: React.FC = () => {
             clients={clients}
             currentUser={currentUser}
             onSubmitMaterial={handleSubmitMaterial}
+            onSubmitArteEditables={handleSubmitArteEditables}
             onSelectPost={(post) => {
               setActiveModalPost(post);
               setIsDetailOpen(true);

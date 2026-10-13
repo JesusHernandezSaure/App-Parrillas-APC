@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Post, ODT, Client, User } from '../types';
 import { 
   Palette, Video, ExternalLink, Send, CheckCircle2, Clock, 
-  Cloud, Info, AlertCircle, Link as LinkIcon 
+  Cloud, Info, AlertCircle, Link as LinkIcon, Sparkles, ArrowRight, Layers 
 } from 'lucide-react';
 
 interface ProduccionViewProps {
@@ -11,6 +11,7 @@ interface ProduccionViewProps {
   clients: Client[];
   currentUser: User;
   onSubmitMaterial: (post: Post, odt: ODT, materialUrl: string) => void;
+  onSubmitArteEditables?: (post: Post, odt: ODT, editableUrl: string, notasArte?: string) => void;
   onSelectPost: (post: Post) => void;
 }
 
@@ -20,6 +21,7 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
   clients,
   currentUser,
   onSubmitMaterial,
+  onSubmitArteEditables,
   onSelectPost
 }) => {
   const isArte = currentUser.role === 'Arte';
@@ -27,17 +29,25 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
 
   const [urlsMap, setUrlsMap] = useState<Record<string, string>>({});
   const [errorsMap, setErrorsMap] = useState<Record<string, string>>({});
+  const [editableUrlsMap, setEditableUrlsMap] = useState<Record<string, string>>({});
+  const [notasArteMap, setNotasArteMap] = useState<Record<string, string>>({});
+  const [editableErrorsMap, setEditableErrorsMap] = useState<Record<string, string>>({});
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'Nivel 1' | 'Nivel 2' | 'Nivel 3'>('all');
+
+  // Posts de video que están actualmente en espera en el departamento de Arte
+  const videoWaitingInArte = useMemo(() => {
+    return posts.filter(p => p.estado === 'Diseño de Editables (Arte)' && p.tipoMaterial === 'Video');
+  }, [posts]);
 
   // Filtrar posts asignados a esta área técnica y ordenar por urgencia (Nivel 1 primero)
   const pendingPosts = useMemo(() => {
     let list = posts;
     if (isArte) {
-      list = list.filter(p => p.estado === 'Producción Arte');
+      list = list.filter(p => p.estado === 'Producción Arte' || p.estado === 'Diseño de Editables (Arte)');
     } else if (isVideo) {
       list = list.filter(p => p.estado === 'Producción Audio/Video');
     } else {
-      list = list.filter(p => p.estado === 'Producción Arte' || p.estado === 'Producción Audio/Video');
+      list = list.filter(p => p.estado === 'Producción Arte' || p.estado === 'Producción Audio/Video' || p.estado === 'Diseño de Editables (Arte)');
     }
 
     if (priorityFilter !== 'all') {
@@ -57,12 +67,21 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
   }, [posts, isArte, isVideo, priorityFilter]);
 
   const deliveredPosts = useMemo(() => {
-    return posts.filter(p => p.enlaceMaterialFinal && p.estado !== 'Producción Arte' && p.estado !== 'Producción Audio/Video');
+    return posts.filter(p => p.enlaceMaterialFinal && p.estado !== 'Producción Arte' && p.estado !== 'Producción Audio/Video' && p.estado !== 'Diseño de Editables (Arte)');
   }, [posts]);
 
   const handleUrlChange = (postId: string, val: string) => {
     setUrlsMap(prev => ({ ...prev, [postId]: val }));
     setErrorsMap(prev => ({ ...prev, [postId]: '' }));
+  };
+
+  const handleEditableUrlChange = (postId: string, val: string) => {
+    setEditableUrlsMap(prev => ({ ...prev, [postId]: val }));
+    setEditableErrorsMap(prev => ({ ...prev, [postId]: '' }));
+  };
+
+  const handleNotasArteChange = (postId: string, val: string) => {
+    setNotasArteMap(prev => ({ ...prev, [postId]: val }));
   };
 
   const handleSubmit = (post: Post, odt: ODT) => {
@@ -72,6 +91,18 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
       return;
     }
     onSubmitMaterial(post, odt, url);
+  };
+
+  const handleSubmitEditableArte = (post: Post, odt: ODT) => {
+    const url = editableUrlsMap[post.id]?.trim() || post.enlaceEditableArte?.trim();
+    if (!url) {
+      setEditableErrorsMap(prev => ({ ...prev, [post.id]: 'Debes ingresar el enlace (OneDrive o Google Drive) a los archivos editables/ilustraciones.' }));
+      return;
+    }
+    const notas = notasArteMap[post.id]?.trim() || post.notasArteParaVideo || '';
+    if (onSubmitArteEditables) {
+      onSubmitArteEditables(post, odt, url, notas);
+    }
   };
 
   return (
@@ -114,6 +145,35 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
           </span>
         </div>
       </div>
+
+      {/* AVISO PARA AUDIO Y VIDEO: POSTS EN DISEÑO DE EDITABLES POR ARTE */}
+      {isVideo && videoWaitingInArte.length > 0 && (
+        <div className="bg-purple-50 border border-purple-300 rounded-2xl p-4 flex items-start justify-between gap-3 text-xs text-purple-950 shadow-2xs">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <strong className="font-bold text-sm block text-purple-950">
+                Parrilla Telefém / Videos con Editables en Arte ({videoWaitingInArte.length})
+              </strong>
+              <p className="text-purple-800 text-xs mt-0.5 leading-relaxed">
+                El equipo de <strong>Arte</strong> está diseñando las ilustraciones y recursos editables para {videoWaitingInArte.length} post(s) de video. En cuanto Arte entregue los editables, se habilitarán aquí automáticamente con el enlace listo para animación.
+              </p>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                {videoWaitingInArte.map(vp => (
+                  <span key={vp.id} className="px-2.5 py-0.5 rounded-md bg-purple-200/90 text-purple-900 font-mono font-bold text-[11px]">
+                    {vp.numeroInterno} • {vp.redSocial}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-purple-200 text-purple-900 shrink-0">
+            En Cola de Arte
+          </span>
+        </div>
+      )}
 
       {/* Lista de Trabajos Pendientes */}
       <div className="space-y-4">
@@ -283,40 +343,149 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
                   </div>
                 )}
 
-                {/* Formulario de entrega: Enlace del Material Final */}
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-                    Enlace del Material Final Producido (OneDrive / Google Drive URL) *
-                  </label>
-                  
-                  <div className="flex flex-col sm:flex-row items-center gap-2">
-                    <div className="relative flex-1 w-full">
-                      <LinkIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="url"
-                        placeholder="https://apcpublicidad-my.sharepoint.com/... o Google Drive"
-                        className="w-full text-xs pl-9 pr-3 py-2 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 font-medium"
-                        value={currentUrl}
-                        onChange={(e) => handleUrlChange(post.id, e.target.value)}
-                      />
+                {/* Indicador Especial si requiere Recursos de Arte (Telefém) */}
+                {post.estado === 'Diseño de Editables (Arte)' ? (
+                  <div className="p-4 bg-purple-50 rounded-xl border border-purple-200 space-y-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <strong className="text-xs font-black uppercase tracking-wider text-purple-950 block">
+                          🎨 Tarea de Arte: Preparar Recursos Editables para Audio y Video (Parrilla Telefém)
+                        </strong>
+                        <p className="text-[11px] text-purple-800 leading-relaxed mt-0.5">
+                          Diseña las ilustraciones y recursos gráficos en capas separadas (Figma, Illustrator, PSD) y compártelos a continuación para que el editor de <strong>Audio y Video</strong> pueda animar el video.
+                        </p>
+                      </div>
                     </div>
 
-                    {odt && (
-                      <button
-                        type="button"
-                        onClick={() => handleSubmit(post, odt)}
-                        className="w-full sm:w-auto px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 shrink-0"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        Entregar y Enviar a Corrección de Material
-                      </button>
-                    )}
-                  </div>
+                    <div className="space-y-2 pt-1 border-t border-purple-200/70">
+                      <div>
+                        <label className="text-[11px] font-bold text-purple-950 uppercase tracking-wider block mb-1">
+                          Enlace a Archivos Editables / Ilustraciones (OneDrive corporativo o Google Drive) *
+                        </label>
+                        <div className="relative">
+                          <LinkIcon className="w-4 h-4 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="url"
+                            placeholder="https://apcpublicidad-my.sharepoint.com/... o Drive con archivos editables"
+                            className="w-full text-xs pl-9 pr-3 py-2 border border-purple-200 rounded-xl bg-white focus:ring-2 focus:ring-purple-500 font-medium"
+                            value={editableUrlsMap[post.id] !== undefined ? editableUrlsMap[post.id] : (post.enlaceEditableArte || '')}
+                            onChange={(e) => handleEditableUrlChange(post.id, e.target.value)}
+                          />
+                        </div>
+                      </div>
 
-                  {errorsMap[post.id] && (
-                    <p className="text-xs text-rose-600 font-semibold">{errorsMap[post.id]}</p>
-                  )}
-                </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-purple-950 uppercase tracking-wider block mb-1">
+                          Indicaciones / Notas para Audio y Video (Opcional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej. Capas de personajes separadas en artboards para After Effects, fuentes adjuntas."
+                          className="w-full text-xs px-3 py-2 border border-purple-200 rounded-xl bg-white focus:ring-2 focus:ring-purple-500 font-medium"
+                          value={notasArteMap[post.id] !== undefined ? notasArteMap[post.id] : (post.notasArteParaVideo || '')}
+                          onChange={(e) => handleNotasArteChange(post.id, e.target.value)}
+                        />
+                      </div>
+
+                      {editableErrorsMap[post.id] && (
+                        <p className="text-xs text-rose-600 font-semibold">{editableErrorsMap[post.id]}</p>
+                      )}
+
+                      {odt && (
+                        <div className="pt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleSubmitEditableArte(post, odt)}
+                            className="w-full sm:w-auto px-5 py-2.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Entregar Editables y Transferir a Audio y Video</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Alerta Destacada para Audio y Video si este video requería recursos de Arte */}
+                    {post.requiereArtePrevio && (
+                      <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/70 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-purple-600 shrink-0" />
+                            <strong className="text-xs font-bold text-purple-950">
+                              Recursos Editables de Arte Disponibles (Parrilla Telefém)
+                            </strong>
+                          </div>
+
+                          {post.enlaceEditableArte ? (
+                            <a
+                              href={post.enlaceEditableArte}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs self-start sm:self-auto"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              Abrir Editables de Arte
+                            </a>
+                          ) : (
+                            <span className="text-xs text-amber-700 font-semibold bg-amber-100 px-2 py-0.5 rounded-md">
+                              Pendiente de enlace por Arte
+                            </span>
+                          )}
+                        </div>
+
+                        {post.notasArteParaVideo && (
+                          <div className="bg-white/90 p-2.5 rounded-lg border border-purple-100 text-xs text-purple-950">
+                            <strong className="block text-[10px] text-purple-600 uppercase tracking-wider font-bold">
+                              Indicaciones de Arte para Video:
+                            </strong>
+                            <p className="mt-0.5 whitespace-pre-wrap">{post.notasArteParaVideo}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Formulario de entrega estándar: Enlace del Material Final */}
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                        {isArte ? 'Enlace del Arte Final Producido (OneDrive / Google Drive URL) *' : 'Enlace del Video Final Producido (OneDrive / Google Drive URL) *'}
+                      </label>
+                      
+                      <div className="flex flex-col sm:flex-row items-center gap-2">
+                        <div className="relative flex-1 w-full">
+                          <LinkIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="url"
+                            placeholder="https://apcpublicidad-my.sharepoint.com/... o Google Drive"
+                            className="w-full text-xs pl-9 pr-3 py-2 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500 font-medium"
+                            value={currentUrl}
+                            onChange={(e) => handleUrlChange(post.id, e.target.value)}
+                          />
+                        </div>
+
+                        {odt && (
+                          <button
+                            type="button"
+                            onClick={() => handleSubmit(post, odt)}
+                            className="w-full sm:w-auto px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            Entregar y Enviar a Corrección de Material
+                          </button>
+                        )}
+                      </div>
+
+                      {errorsMap[post.id] && (
+                        <p className="text-xs text-rose-600 font-semibold">{errorsMap[post.id]}</p>
+                      )}
+                    </div>
+                  </>
+                )}
 
               </div>
             );

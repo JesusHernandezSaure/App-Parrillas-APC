@@ -713,6 +713,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                   <option value="Esperando Ejecutivo">Esperando Ejecutivo</option>
                   <option value="Aprobación Copy Cliente">Aprobación Copy Cliente</option>
                   <option value="Cambios solicitados por Cliente">Cambios Solicitados por Cliente</option>
+                  <option value="Diseño de Editables (Arte)">Diseño de Editables (Arte)</option>
                   <option value="Producción Arte">Producción Arte</option>
                   <option value="Producción Audio/Video">Producción Audio/Video</option>
                   <option value="Corrección Material">Corrección Material</option>

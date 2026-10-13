@@ -73,6 +73,7 @@ export const MACRO_STAGES: MacroStage[] = [
     shortName: '4. Producción',
     order: 3,
     statuses: [
+      'Diseño de Editables (Arte)',
       'Producción Arte',
       'Producción Audio/Video',
       'Corrección Material',

@@ -25,6 +25,7 @@ const ALL_STATUSES: { status: PostStatus; area: string }[] = [
   { status: 'Corrección de Copy', area: 'Corrección' },
   { status: 'Esperando Ejecutivo', area: 'Ejecutivo' },
   { status: 'Aprobación Copy Cliente', area: 'Cliente' },
+  { status: 'Diseño de Editables (Arte)', area: 'Arte' },
   { status: 'Producción Arte', area: 'Arte' },
   { status: 'Producción Audio/Video', area: 'Audio y Video' },
   { status: 'Corrección Material', area: 'Corrección' },

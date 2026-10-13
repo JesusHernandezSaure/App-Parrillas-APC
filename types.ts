@@ -116,6 +116,7 @@ export type MaterialType = 'Imagen' | 'Video' | 'Carrusel';
 
 export type PostDimensions = 
   | '1080x1080 (1:1 Cuadrado)' 
+  | '1080x1350 (4:5 Vertical)' 
   | '1080x1920 (9:16 Vertical / Reels)' 
   | '1920x1080 (16:9 Horizontal)';
 
@@ -129,6 +130,7 @@ export type PostStatus =
   | 'Corrección de Copy'
   | 'Esperando Ejecutivo'
   | 'Aprobación Copy Cliente'
+  | 'Diseño de Editables (Arte)'
   | 'Producción Arte'
   | 'Producción Audio/Video'
   | 'Corrección Material'
@@ -208,6 +210,10 @@ export interface Post {
   aprobacionInternaFinal?: ApprovalRecord;
   aprobacionClienteMaterial?: ApprovalRecord;
   requiereRevisionMedicaMaterial?: boolean;
+  requiereArtePrevio?: boolean; // Para videos: requiere que Arte diseñe editables/ilustraciones antes de animar (ej. Telefém)
+  enlaceEditableArte?: string; // Enlace a recursos editables (Figma, Illustrator, PSD, Drive) subidos por Arte
+  notasArteParaVideo?: string; // Instrucciones de Arte para el editor de Audio y Video
+  arteCompletado?: boolean; // Indica si Arte ya completó y entregó los editables para este post
   publicado: boolean;
   programado?: boolean;
   fechaProgramada?: string;

@@ -25,6 +25,9 @@ interface PostDetailModalProps {
     tipoMaterial?: MaterialType;
     dimensiones?: string;
     nivelPrioridad?: PriorityLevel;
+    requiereArtePrevio?: boolean;
+    enlaceEditableArte?: string;
+    notasArteParaVideo?: string;
   }) => void;
   onSendToReview?: (post: Post, odt: ODT) => void;
   onDuplicatePost?: (post: Post, newRedSocial: string) => void;
@@ -37,6 +40,7 @@ const MATERIAL_TYPES: MaterialType[] = ['Imagen', 'Video', 'Carrusel'];
 
 const DIMENSION_OPTIONS: { id: PostDimensions; label: string; desc: string }[] = [
   { id: '1080x1080 (1:1 Cuadrado)', label: '1:1 Cuadrado (1080 × 1080 px)', desc: 'Feed Instagram / FB / LinkedIn' },
+  { id: '1080x1350 (4:5 Vertical)', label: '4:5 Vertical (1080 × 1350 px)', desc: 'Feed vertical Instagram / FB' },
   { id: '1080x1920 (9:16 Vertical / Reels)', label: '9:16 Vertical (1080 × 1920 px)', desc: 'Reels / TikTok / Shorts' },
   { id: '1920x1080 (16:9 Horizontal)', label: '16:9 Horizontal (1920 × 1080 px)', desc: 'YouTube / Web horizontal' }
 ];
@@ -94,6 +98,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   const [editTipoMaterial, setEditTipoMaterial] = useState<MaterialType>(post.tipoMaterial || 'Imagen');
   const [editDimensiones, setEditDimensiones] = useState<string>(post.dimensiones || '1080x1080 (1:1 Cuadrado)');
   const [editNivelPrioridad, setEditNivelPrioridad] = useState<PriorityLevel>(post.nivelPrioridad || 'Nivel 2');
+  const [editRequiereArtePrevio, setEditRequiereArtePrevio] = useState<boolean>(post.requiereArtePrevio || false);
+  const [editEnlaceEditableArte, setEditEnlaceEditableArte] = useState<string>(post.enlaceEditableArte || '');
+  const [editNotasArteParaVideo, setEditNotasArteParaVideo] = useState<string>(post.notasArteParaVideo || '');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
@@ -106,6 +113,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     setEditTipoMaterial(post.tipoMaterial || 'Imagen');
     setEditDimensiones(post.dimensiones || '1080x1080 (1:1 Cuadrado)');
     setEditNivelPrioridad(post.nivelPrioridad || 'Nivel 2');
+    setEditRequiereArtePrevio(post.requiereArtePrevio || false);
+    setEditEnlaceEditableArte(post.enlaceEditableArte || '');
+    setEditNotasArteParaVideo(post.notasArteParaVideo || '');
   }, [post]);
 
   useEffect(() => {
@@ -125,7 +135,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
         fechaEntregaMaterial: editFechaEntregaMaterial,
         tipoMaterial: editTipoMaterial,
         dimensiones: editDimensiones,
-        nivelPrioridad: editNivelPrioridad
+        nivelPrioridad: editNivelPrioridad,
+        requiereArtePrevio: editTipoMaterial === 'Video' ? editRequiereArtePrevio : false,
+        enlaceEditableArte: editEnlaceEditableArte.trim(),
+        notasArteParaVideo: editNotasArteParaVideo.trim()
       });
     }
     setSaveSuccess(true);
@@ -144,7 +157,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
         fechaEntregaMaterial: editFechaEntregaMaterial,
         tipoMaterial: editTipoMaterial,
         dimensiones: editDimensiones,
-        nivelPrioridad: editNivelPrioridad
+        nivelPrioridad: editNivelPrioridad,
+        requiereArtePrevio: editTipoMaterial === 'Video' ? editRequiereArtePrevio : false,
+        enlaceEditableArte: editEnlaceEditableArte.trim(),
+        notasArteParaVideo: editNotasArteParaVideo.trim()
       });
     }
     if (odt && onSendToReview) {
@@ -158,7 +174,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
         fechaEntregaMaterial: editFechaEntregaMaterial,
         tipoMaterial: editTipoMaterial,
         dimensiones: editDimensiones,
-        nivelPrioridad: editNivelPrioridad
+        nivelPrioridad: editNivelPrioridad,
+        requiereArtePrevio: editTipoMaterial === 'Video' ? editRequiereArtePrevio : false,
+        enlaceEditableArte: editEnlaceEditableArte.trim(),
+        notasArteParaVideo: editNotasArteParaVideo.trim()
       };
       onSendToReview(updatedPost, odt);
       onClose();
@@ -217,6 +236,8 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       case 'Corrección de Copy':
       case 'Corrección Material':
         return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'Diseño de Editables (Arte)':
+        return 'bg-purple-100 text-purple-800 border-purple-300 font-bold';
       case 'Producción Arte':
         return 'bg-pink-50 text-pink-700 border-pink-200';
       case 'Producción Audio/Video':
@@ -600,6 +621,64 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Configuración de Editables de Arte para Video (Telefém) */}
+                  {editTipoMaterial === 'Video' && (
+                    <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/60 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <label 
+                            onClick={() => setEditRequiereArtePrevio(!editRequiereArtePrevio)}
+                            className="text-xs font-bold text-purple-950 cursor-pointer block"
+                          >
+                            ¿Requiere diseño / editables previos de Arte? (Ej. Telefém / Animación)
+                          </label>
+                          <span className="text-[11px] text-purple-700">
+                            Si está activo, al aprobarse el copy pasa primero a Arte y luego a Audio y Video.
+                          </span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                          <input 
+                            type="checkbox" 
+                            checked={editRequiereArtePrevio} 
+                            onChange={(e) => setEditRequiereArtePrevio(e.target.checked)} 
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-300 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                      </div>
+
+                      {editRequiereArtePrevio && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-purple-200/80">
+                          <div>
+                            <label className="text-[11px] font-bold uppercase text-purple-900 block mb-1">
+                              Enlace de Recursos Editables (Subido por Arte)
+                            </label>
+                            <input
+                              type="url"
+                              value={editEnlaceEditableArte}
+                              onChange={(e) => setEditEnlaceEditableArte(e.target.value)}
+                              placeholder="https://apcpublicidad-my.sharepoint.com/... o Drive"
+                              className="w-full text-xs p-2.5 rounded-xl border border-purple-200 bg-white focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold uppercase text-purple-900 block mb-1">
+                              Notas de Arte para Audio y Video
+                            </label>
+                            <input
+                              type="text"
+                              value={editNotasArteParaVideo}
+                              onChange={(e) => setEditNotasArteParaVideo(e.target.value)}
+                              placeholder="Ej. Capas de personajes separadas en archivo .ai..."
+                              className="w-full text-xs p-2.5 rounded-xl border border-purple-200 bg-white focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* BOTONES DE GUARDADO Y ACCIÓN */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-indigo-200/80">
                     <button
@@ -732,6 +811,68 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       )}
                     </div>
                   </div>
+
+                  {/* Ficha de Recursos Editables de Arte (Telefém / Motion Graphics) */}
+                  {(post.requiereArtePrevio || post.enlaceEditableArte || post.estado === 'Diseño de Editables (Arte)') && (
+                    <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/70 space-y-2.5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0">
+                            <Sparkles className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-purple-950 block">
+                              Recursos Editables de Arte (Parrilla Telefém / Motion)
+                            </span>
+                            <span className="text-[11px] text-purple-700">
+                              Ilustraciones y editables provistos por Arte al equipo de Audio y Video
+                            </span>
+                          </div>
+                        </div>
+
+                        <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold border ${
+                          post.arteCompletado || post.enlaceEditableArte
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                            : post.estado === 'Diseño de Editables (Arte)'
+                            ? 'bg-purple-100 text-purple-900 border-purple-300 animate-pulse'
+                            : 'bg-amber-100 text-amber-800 border-amber-200'
+                        }`}>
+                          {post.arteCompletado || post.enlaceEditableArte
+                            ? '✅ Editables Entregados a Video'
+                            : post.estado === 'Diseño de Editables (Arte)'
+                            ? '🎨 En Diseño por Arte'
+                            : '⏳ Esperando Recursos'}
+                        </span>
+                      </div>
+
+                      <div className="pt-2 border-t border-purple-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        {post.enlaceEditableArte ? (
+                          <a
+                            href={post.enlaceEditableArte}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Abrir Archivos Editables en OneDrive / Drive</span>
+                          </a>
+                        ) : (
+                          <span className="text-xs text-purple-800 italic">
+                            Aún no se ha adjuntado el enlace del editable por parte del equipo de Arte.
+                          </span>
+                        )}
+                      </div>
+
+                      {post.notasArteParaVideo && (
+                        <div className="bg-white/90 p-2.5 rounded-lg border border-purple-100 text-xs text-purple-950">
+                          <strong className="block text-[10px] text-purple-600 uppercase tracking-wider font-bold">
+                            Indicaciones de Arte para Audio y Video:
+                          </strong>
+                          <p className="mt-0.5 whitespace-pre-wrap">{post.notasArteParaVideo}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 
