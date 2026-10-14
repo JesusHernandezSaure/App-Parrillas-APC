@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Post, ODT, Client, User } from '../types';
 import { 
   Building2, CheckCircle2, AlertTriangle, ShieldCheck, 
   MessageSquare, History, Sparkles, Send, Check, AlertCircle,
   Phone, Mail, MessageCircle, Clock, UserCheck, ExternalLink,
-  Copy, CheckCheck, X, ChevronRight
+  Copy, CheckCheck, X, ChevronRight, ChevronLeft, Eye,
+  ChevronDown, Layers
 } from 'lucide-react';
 import { 
   checkParrillaCopyReadiness, 
@@ -57,11 +58,41 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
   // Pestaña activa dentro de la Parrilla: únicamente 'copy' e 'historial'
   const [activeTab, setActiveTab] = useState<'copy' | 'historial'>('copy');
 
-  // Posts ÚNICAMENTE de la ODT seleccionada, sanitizados para el cliente
+  // Filtro estricto para Cliente: sólo lo que expresamente el ejecutivo envió o ya está aprobado/dictaminado
+  const isPostVisibleToClient = (p: Post) => {
+    // 1. Enviado expresamente por el ejecutivo a revisión de copy o material
+    if (p.estado === 'Aprobación Copy Cliente' || p.estado === 'Aprobación Material Cliente') {
+      return true;
+    }
+    // 2. Posts donde el cliente solicitó cambios en esta o rondas previas
+    if (
+      p.estado === 'Cambios solicitados por Cliente' || 
+      p.aprobacionClienteCopy?.status === 'Cambios Solicitados' || 
+      p.aprobacionClienteMaterial?.status === 'Cambios Solicitados'
+    ) {
+      return true;
+    }
+    // 3. Posts ya aprobados previamente por el cliente
+    if (p.aprobacionClienteCopy?.status === 'Aprobado' || p.aprobacionClienteMaterial?.status === 'Aprobado') {
+      return true;
+    }
+    // 4. Posts en etapas avanzadas de producción que ya pasaron visto bueno de cliente
+    if ([
+      'Producción Arte', 'Producción Audio/Video', 'Corrección Material',
+      'Revisión Médica Material', 'Aprobación Interna Final',
+      'Listo para Publicar', 'Programado', 'Publicado'
+    ].includes(p.estado)) {
+      return true;
+    }
+    // Ocultar al 100% lo que esté en filtro interno (Borrador, Redacción de Copy, Revisión Copy, Revisión Médica Copy, Ajustes de Copy, Esperando Ejecutivo)
+    return false;
+  };
+
+  // Posts ÚNICAMENTE de la ODT seleccionada que han sido expresamente enviados al cliente o aprobados
   const odtPosts = useMemo(() => {
     if (!activeOdt) return [];
     return posts
-      .filter(p => p.odtId === activeOdt.id)
+      .filter(p => p.odtId === activeOdt.id && isPostVisibleToClient(p))
       .map(sanitizePostForClient);
   }, [posts, activeOdt]);
 
@@ -210,6 +241,43 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
     setExplicitlyApproved({});
     setGeneralComment('');
     setShowGeneralChangePrompt(false);
+    setViewingPost(null);
+  };
+
+  // Modal "Ver Post" exclusivo para revisión del Cliente (sin opciones de edición)
+  const [viewingPost, setViewingPost] = useState<Post | null>(null);
+  const [modalComment, setModalComment] = useState<string>('');
+  const [isModalChangeActive, setIsModalChangeActive] = useState<boolean>(false);
+
+  // Sincronizar comentario del modal con los cambios registrados
+  useEffect(() => {
+    if (viewingPost) {
+      if (postChanges[viewingPost.id]) {
+        setModalComment(postChanges[viewingPost.id]);
+        setIsModalChangeActive(true);
+      } else {
+        setModalComment('');
+        setIsModalChangeActive(false);
+      }
+    }
+  }, [viewingPost, postChanges]);
+
+  // Navegación entre posts visibles en el modal
+  const viewingPostIndex = useMemo(() => {
+    if (!viewingPost) return -1;
+    return odtPosts.findIndex(p => p.id === viewingPost.id);
+  }, [viewingPost, odtPosts]);
+
+  const handlePrevPost = () => {
+    if (viewingPostIndex > 0) {
+      setViewingPost(odtPosts[viewingPostIndex - 1]);
+    }
+  };
+
+  const handleNextPost = () => {
+    if (viewingPostIndex >= 0 && viewingPostIndex < odtPosts.length - 1) {
+      setViewingPost(odtPosts[viewingPostIndex + 1]);
+    }
   };
 
   // Marcar post individual como aprobado
@@ -324,35 +392,61 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
           </div>
         </div>
 
-        {/* Selector de Parrilla (carga únicamente la ODT abierta) */}
-        {clientOdts.length > 1 && (
-          <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center gap-2">
-            <span className="text-xs text-slate-400 font-medium shrink-0">Parrilla Activa:</span>
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              {clientOdts.map(odt => {
-                const isSelected = odt.id === activeOdt.id;
-                return (
-                  <button
-                    key={odt.id}
-                    onClick={() => handleSwitchOdt(odt.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 ${
-                      isSelected
-                        ? 'bg-cyan-500 text-slate-950 shadow-xs'
-                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-                    }`}
-                  >
-                    <span>{odt.nombreParrilla}</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${
-                      isSelected ? 'bg-cyan-900/40 text-slate-900 font-extrabold' : 'bg-slate-900 text-slate-400'
-                    }`}>
-                      {odt.mesPeriodo}
-                    </span>
-                  </button>
-                );
-              })}
+        {/* Selector de Parrilla Activa en Menú Desplegable */}
+        <div className="pt-3.5 border-t border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2 text-xs text-slate-300 font-semibold shrink-0">
+              <Layers className="w-4 h-4 text-cyan-400" />
+              <span>Parrilla activa:</span>
             </div>
+
+            {clientOdts.length > 1 ? (
+              <div className="relative inline-block w-full sm:w-auto min-w-[280px] lg:min-w-[340px]">
+                <select
+                  value={activeOdt.id}
+                  onChange={(e) => handleSwitchOdt(e.target.value)}
+                  aria-label="Seleccionar parrilla activa"
+                  className="w-full appearance-none bg-slate-800/90 hover:bg-slate-800 text-white font-bold text-xs pl-3.5 pr-10 py-2.5 rounded-xl border border-slate-700 hover:border-cyan-500/50 focus:outline-hidden focus:ring-2 focus:ring-cyan-500/50 transition-all cursor-pointer shadow-xs"
+                >
+                  {clientOdts.map((odt) => {
+                    const visibleCount = posts.filter(p => p.odtId === odt.id && isPostVisibleToClient(p)).length;
+                    const pendingCount = posts.filter(p => p.odtId === odt.id && p.estado === 'Aprobación Copy Cliente').length;
+                    const extraLabel = pendingCount > 0 ? `(${pendingCount} por revisar)` : visibleCount > 0 ? `(${visibleCount} posts)` : '(En preparación)';
+                    return (
+                      <option key={odt.id} value={odt.id} className="bg-slate-900 text-white py-2">
+                        {odt.nombreParrilla} — {odt.mesPeriodo} {extraLabel}
+                      </option>
+                    );
+                  })}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-cyan-400">
+                  <ChevronDown className="w-4 h-4" />
+                </div>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-2 bg-slate-800/70 border border-slate-700/80 px-3.5 py-1.5 rounded-xl text-xs">
+                <span className="font-bold text-white">{activeOdt.nombreParrilla}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-800 font-semibold">
+                  {activeOdt.mesPeriodo}
+                </span>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Resumen rápido de la parrilla seleccionada */}
+          <div className="flex items-center gap-2 text-xs flex-wrap">
+            <span className="text-slate-400">Posts en revisión:</span>
+            <span className="font-bold text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+              {totalPostsCount} {totalPostsCount === 1 ? 'publicación' : 'publicaciones'}
+            </span>
+            {pendingClientPosts.length > 0 && (
+              <span className="text-[11px] font-bold text-amber-300 bg-amber-950/80 px-2.5 py-1 rounded-lg border border-amber-800 flex items-center gap-1.5 shadow-2xs animate-pulse">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                {pendingClientPosts.length} por dictaminar
+              </span>
+            )}
+          </div>
+        </div>
 
         {/* Ficha Ejecutiva del Cliente: Con quién comunicarse */}
         <div className="pt-3.5 border-t border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60">
@@ -581,23 +675,16 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                   )}
                 </p>
               </div>
-            ) : hasPostsInInternalPrep && approvedPostsCount > 0 ? (
-              <div className="p-3.5 bg-cyan-50 border border-cyan-200 rounded-xl text-xs text-cyan-950 flex items-start gap-2.5">
-                <Clock className="w-4 h-4 text-cyan-700 shrink-0 mt-0.5" />
+            ) : totalPostsCount === 0 ? (
+              <div className="p-4 bg-cyan-50 border border-cyan-200 rounded-xl text-xs text-cyan-950 flex items-start gap-3">
+                <Clock className="w-5 h-5 text-cyan-700 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="font-bold">Parrilla parcialmente aprobada: </strong>
-                  Actualmente <strong>{approvedPostsCount} de {totalPostsCount} posts</strong> ya fueron autorizados por ti y avanzan en producción técnica. 
-                  El equipo de APC se encuentra redactando y revisando internamente {internalPrepPosts.length} nuevo(s) post(s) adicional(es) ({internalPrepPosts.map(p => `#${p.numeroInterno} - ${p.redSocial}`).join(', ')}). 
-                  Tan pronto cuenten con los filtros médicos y de corrección, aparecerán aquí para tu visto bueno.
-                </div>
-              </div>
-            ) : !copyReadiness.isReady ? (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="font-bold">Parrilla en preparación interna por APC: </strong>
-                  Actualmente {copyReadiness.reviewedCount} de {copyReadiness.totalPosts} posts cuentan con visto bueno médico y ortotipográfico. 
-                  La autorización completa se habilitará cuando todos los posts estén 100% revisados internamente.
+                  <strong className="font-bold text-sm block mb-0.5 text-cyan-900">
+                    Parrilla en preparación interna por el equipo de APC
+                  </strong>
+                  <p className="text-cyan-800 leading-relaxed">
+                    Tu equipo de redacción y corrección se encuentra preparando los contenidos con todos los filtros de calidad. En cuanto tu ejecutiva ({ejecutivoUser.name}) te envíe los posts a revisión, se habilitarán aquí para tu visto bueno.
+                  </p>
                 </div>
               </div>
             ) : null}
@@ -689,92 +776,115 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
             </div>
           </div>
 
-          {/* Tabla Condensada: Número de Post | Red social | Fecha prevista | Copy In | Copy Out | Revisión */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
-                    <th className="p-3 w-28">Número</th>
-                    <th className="p-3 w-24">Red Social</th>
-                    <th className="p-3 w-28">Fecha Prevista</th>
-                    <th className="p-3">Copy In</th>
-                    <th className="p-3">Copy Out</th>
-                    <th className="p-3 w-48 text-right">Revisión de Copy</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {odtPosts.map((post) => {
-                    const statusInfo = postStatusMap.get(post.id);
-                    const isPostApproved = statusInfo?.isApproved;
-                    const isPendingClient = statusInfo?.isPendingClient;
-                    const isInternalPrep = statusInfo?.isInternalPrep;
+          {/* Tabla Condensada o Estado Vacío */}
+          {odtPosts.length === 0 ? (
+            <div className="bg-white rounded-2xl p-10 border border-slate-200 shadow-2xs text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-cyan-50 text-cyan-700 flex items-center justify-center mx-auto border border-cyan-100">
+                <Clock className="w-7 h-7" />
+              </div>
+              <h4 className="text-base font-bold text-slate-800">
+                Publicaciones en preparación interna por APC
+              </h4>
+              <p className="text-xs text-slate-500 max-w-lg mx-auto leading-relaxed">
+                Tu equipo de redacción y corrección se encuentra trabajando en la preparación y filtros de calidad de esta parrilla.
+                En cuanto tu ejecutiva ({ejecutivoUser.name}) te envíe los posts a revisión, se habilitarán aquí para tu dictamen.
+              </p>
+              {ejecutivoUser.whatsapp && (
+                <div className="pt-2">
+                  <a
+                    href={`https://wa.me/${ejecutivoUser.whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${ejecutivoUser.name.split(' ')[0]}, te consulto sobre la entrega de la parrilla ${activeOdt.nombreParrilla}.`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-colors shadow-2xs"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Consultar estatus con {ejecutivoUser.name.split(' ')[0]}</span>
+                  </a>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
+                      <th className="p-3 w-32">Número</th>
+                      <th className="p-3 w-28">Red Social</th>
+                      <th className="p-3 w-28">Fecha Prevista</th>
+                      <th className="p-3">Copy In</th>
+                      <th className="p-3">Copy Out</th>
+                      <th className="p-3 w-56 text-right">Revisión de Copy</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {odtPosts.map((post) => {
+                      const statusInfo = postStatusMap.get(post.id);
+                      const isPostApproved = statusInfo?.isApproved;
+                      const isPendingClient = statusInfo?.isPendingClient;
+                      const hasChange = post.id in postChanges;
+                      const isApproved = Boolean(explicitlyApproved[post.id]);
 
-                    const hasChange = post.id in postChanges;
-                    const isApproved = Boolean(explicitlyApproved[post.id]);
+                      return (
+                        <React.Fragment key={post.id}>
+                          <tr className={`hover:bg-slate-50/80 transition-colors ${
+                            hasChange ? 'bg-amber-50/60' : isApproved ? 'bg-emerald-50/30' : isPendingClient ? 'bg-amber-50/20' : ''
+                          }`}>
+                            <td className="p-3 font-mono font-bold text-slate-900 align-top">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-800">
+                                  {post.numeroInterno}
+                                </span>
+                                {isPendingClient && approvedPostsCount > 0 && (
+                                  <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                                    Nuevo
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3 align-top font-semibold text-indigo-700">
+                              {post.redSocial}
+                            </td>
+                            <td className="p-3 align-top text-slate-500 font-medium">
+                              {post.fechaPrevista}
+                            </td>
+                            <td className="p-3 align-top text-slate-800 leading-relaxed font-medium">
+                              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                                <RichTextDisplay content={post.copyIn} fallbackText="Sin copy in" showCopyButton copyButtonLabel="Copiar" />
+                              </div>
+                            </td>
+                            <td className="p-3 align-top text-slate-700 leading-relaxed">
+                              <div className="bg-slate-50/60 p-2.5 rounded-lg border border-slate-200/60">
+                                <RichTextDisplay content={post.copyOut} fallbackText="Sin copy out" showCopyButton copyButtonLabel="Copiar" />
+                              </div>
+                            </td>
+                            <td className="p-3 align-top text-right">
+                              <div className="flex flex-col items-end gap-2">
+                                {/* Botón "Ver post completo" ubicado ARRIBA de las acciones de decisión */}
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingPost(post)}
+                                  className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs hover:shadow-xs"
+                                  title="Abrir vista detallada sin edición para revisar con comodidad y navegar entre publicaciones"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                                  <span>Ver post completo</span>
+                                </button>
 
-                    return (
-                      <React.Fragment key={post.id}>
-                        <tr className={`hover:bg-slate-50/80 transition-colors ${
-                          hasChange ? 'bg-amber-50/60' : isApproved ? 'bg-emerald-50/30' : isPendingClient ? 'bg-amber-50/20' : ''
-                        }`}>
-                          <td className="p-3 font-mono font-bold text-slate-900 align-top">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-800">
-                                {post.numeroInterno}
-                              </span>
-                              {isPendingClient && approvedPostsCount > 0 && (
-                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
-                                  Nuevo
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-3 align-top font-semibold text-indigo-700">
-                            {post.redSocial}
-                          </td>
-                          <td className="p-3 align-top text-slate-500 font-medium">
-                            {post.fechaPrevista}
-                          </td>
-                          <td className="p-3 align-top text-slate-800 leading-relaxed font-medium">
-                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                              <RichTextDisplay content={post.copyIn} fallbackText="Sin copy in" showCopyButton copyButtonLabel="Copiar" />
-                            </div>
-                          </td>
-                          <td className="p-3 align-top text-slate-700 leading-relaxed">
-                            <div className="bg-slate-50/60 p-2.5 rounded-lg border border-slate-200/60">
-                              <RichTextDisplay content={post.copyOut} fallbackText="Sin copy out" showCopyButton copyButtonLabel="Copiar" />
-                            </div>
-                          </td>
-                          <td className="p-3 align-top text-right">
-                            {isPostApproved ? (
-                              <div className="flex flex-col items-end gap-0.5">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-xs">
-                                  <Check className="w-3.5 h-3.5" /> Aprobado
-                                </span>
-                                <span className="text-[10px] text-emerald-700 font-medium">
-                                  Copy autorizado
-                                </span>
-                              </div>
-                            ) : isInternalPrep ? (
-                              <div className="flex flex-col items-end gap-0.5">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 font-medium text-[11px]" title={`En flujo interno de APC: ${post.estado}`}>
-                                  <Clock className="w-3.5 h-3.5 text-slate-400" /> Revisión APC
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-mono">
-                                  {post.estado}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-end gap-1.5">
-                                {hasChange ? (
+                                {/* Decisiones rápidas: Estado dictaminado o botones de acción */}
+                                {isPostApproved ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-xs">
+                                    <Check className="w-3.5 h-3.5" /> Aprobado
+                                  </span>
+                                ) : hasChange ? (
                                   <div className="flex flex-col items-end gap-1">
                                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-amber-100 border border-amber-300 text-amber-900 font-bold text-[11px]">
                                       <MessageSquare className="w-3 h-3 text-amber-700" /> Con cambios
                                     </span>
                                     <button
+                                      type="button"
                                       onClick={() => handleMarkApproved(post.id)}
-                                      className="text-[11px] text-slate-500 hover:text-emerald-700 font-semibold underline transition-colors"
+                                      className="text-[11px] text-slate-500 hover:text-emerald-700 font-semibold underline transition-colors cursor-pointer"
                                     >
                                       Marcar aprobado
                                     </button>
@@ -785,24 +895,27 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                                       <Check className="w-3 h-3 text-emerald-700" /> Listo para aprobar
                                     </span>
                                     <button
+                                      type="button"
                                       onClick={() => handleRequestChange(post.id)}
-                                      className="text-[11px] text-slate-500 hover:text-amber-700 font-semibold underline transition-colors"
+                                      className="text-[11px] text-slate-500 hover:text-amber-700 font-semibold underline transition-colors cursor-pointer"
                                     >
                                       Pedir cambio
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="flex items-center justify-end gap-1">
+                                  <div className="flex items-center justify-end gap-1.5">
                                     <button
+                                      type="button"
                                       onClick={() => handleMarkApproved(post.id)}
-                                      className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
-                                      title="Aprobar el copy de este post"
+                                      className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                                      title="Aprobar el copy de este post directamente"
                                     >
                                       <Check className="w-3.5 h-3.5" /> Aprobar
                                     </button>
                                     <button
+                                      type="button"
                                       onClick={() => handleRequestChange(post.id)}
-                                      className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                                      className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
                                       title="Solicitar cambios en este post"
                                     >
                                       <MessageSquare className="w-3.5 h-3.5" /> Cambios
@@ -810,45 +923,45 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                                   </div>
                                 )}
                               </div>
-                            )}
-                          </td>
-                        </tr>
-
-                        {/* Observación contextual para este post si se seleccionó para cambio */}
-                        {!isPostApproved && hasChange && (
-                          <tr className="bg-amber-50/80 border-b border-amber-200">
-                            <td colSpan={6} className="p-3.5 pl-6 sm:pl-10">
-                              <div className="space-y-1.5 max-w-3xl">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[11px] font-bold text-amber-950 flex items-center gap-1">
-                                    <MessageSquare className="w-3.5 h-3.5 text-amber-700" />
-                                    Observación específica para el Post {post.numeroInterno} ({post.redSocial}):
-                                  </span>
-                                  <button
-                                    onClick={() => handleMarkApproved(post.id)}
-                                    className="text-[11px] text-slate-500 hover:text-amber-900 font-medium underline"
-                                  >
-                                    Cancelar y marcar aprobado
-                                  </button>
-                                </div>
-                                <textarea
-                                  rows={2}
-                                  value={postChanges[post.id] || ''}
-                                  onChange={(e) => updatePostChangeComment(post.id, e.target.value)}
-                                  placeholder="Escribe aquí los ajustes que necesitas en el copy in, copy out o llamada a la acción..."
-                                  className="w-full text-xs p-2.5 rounded-xl border border-amber-300 bg-white text-slate-800 focus:ring-1 focus:ring-amber-500 placeholder:text-slate-400"
-                                />
-                              </div>
                             </td>
                           </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
+
+                          {/* Observación contextual para este post si se seleccionó para cambio */}
+                          {!isPostApproved && hasChange && (
+                            <tr className="bg-amber-50/80 border-b border-amber-200">
+                              <td colSpan={6} className="p-3.5 pl-6 sm:pl-10">
+                                <div className="space-y-1.5 max-w-3xl">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-amber-950 flex items-center gap-1">
+                                      <MessageSquare className="w-3.5 h-3.5 text-amber-700" />
+                                      Observación específica para el Post {post.numeroInterno} ({post.redSocial}):
+                                    </span>
+                                    <button
+                                      onClick={() => handleMarkApproved(post.id)}
+                                      className="text-[11px] text-slate-500 hover:text-amber-900 font-medium underline cursor-pointer"
+                                    >
+                                      Cancelar y marcar aprobado
+                                    </button>
+                                  </div>
+                                  <textarea
+                                    rows={2}
+                                    value={postChanges[post.id] || ''}
+                                    onChange={(e) => updatePostChangeComment(post.id, e.target.value)}
+                                    placeholder="Escribe aquí los ajustes que necesitas en el copy in, copy out o llamada a la acción..."
+                                    className="w-full text-xs p-2.5 rounded-xl border border-amber-300 bg-white text-slate-800 focus:ring-1 focus:ring-amber-500 placeholder:text-slate-400"
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Módulo de Cierre y Aprobación de la Parrilla (Al pie de la lista) */}
           {!isEntireParrillaApproved && (hasPendingAdditionalPosts || copyReadiness.isReady || changedCount > 0) && (
@@ -1395,6 +1508,264 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
               >
                 Cerrar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CLIENTE: "VER POST" (Vista limpia, enriquecida, sin edición, con Aprobar o Solicitar Cambios) */}
+      {viewingPost && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white p-4 px-5 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="px-2.5 py-1 rounded-md bg-white/10 text-white font-mono text-xs font-bold border border-white/20">
+                  Post #{viewingPost.numeroInterno}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 text-xs font-bold border border-indigo-400/30">
+                  {viewingPost.redSocial}
+                </span>
+                <span className="text-xs text-slate-300 font-medium flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                  Fecha: <strong className="text-white">{viewingPost.fechaPrevista}</strong>
+                </span>
+                {viewingPost.tipoMaterial && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
+                    Formato: {viewingPost.tipoMaterial}
+                  </span>
+                )}
+              </div>
+
+              {/* Botones de navegación y cierre */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center bg-white/10 rounded-lg p-0.5 border border-white/15">
+                  <button
+                    type="button"
+                    onClick={handlePrevPost}
+                    disabled={viewingPostIndex <= 0}
+                    className="p-1 rounded text-white hover:bg-white/20 disabled:opacity-30 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                    title="Post Anterior"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-[11px] font-mono px-2 text-slate-300 select-none">
+                    {viewingPostIndex + 1}/{odtPosts.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleNextPost}
+                    disabled={viewingPostIndex >= odtPosts.length - 1}
+                    className="p-1 rounded text-white hover:bg-white/20 disabled:opacity-30 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                    title="Siguiente Post"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingPost(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer ml-1"
+                  title="Cerrar ventana"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body: Copys y Enlaces */}
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-5 text-xs text-slate-800">
+              {/* COPY IN */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                    <span>Copy In (Texto para la imagen o gráfica)</span>
+                  </label>
+                  <span className="text-[11px] text-slate-400">Texto que integrará el diseñador</span>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <RichTextDisplay
+                    content={viewingPost.copyIn}
+                    fallbackText="Sin texto para gráfica (copy in)"
+                    showCopyButton
+                    copyButtonLabel="Copiar"
+                  />
+                </div>
+              </div>
+
+              {/* COPY OUT */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-cyan-600"></span>
+                    <span>Copy Out (Texto de la publicación / Caption)</span>
+                  </label>
+                  <span className="text-[11px] text-slate-400">Texto para el feed / descripción</span>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <RichTextDisplay
+                    content={viewingPost.copyOut}
+                    fallbackText="Sin texto de publicación (copy out)"
+                    showCopyButton
+                    copyButtonLabel="Copiar Caption"
+                  />
+                </div>
+              </div>
+
+              {/* Enlace de Referencia si existe */}
+              {viewingPost.enlaceReferencia && (
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-700 block">Enlace de Referencia / Benchmark:</span>
+                    <span className="text-[11px] text-slate-500 truncate max-w-sm block">{viewingPost.enlaceReferencia}</span>
+                  </div>
+                  <a
+                    href={viewingPost.enlaceReferencia}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1 shrink-0 transition-colors shadow-2xs"
+                  >
+                    <span>Abrir Enlace</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              )}
+
+              {/* Enlace de Material Final si existe */}
+              {viewingPost.enlaceMaterialFinal && (
+                <div className="bg-indigo-50/70 p-3 rounded-xl border border-indigo-200 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] font-bold text-indigo-900 block">Material Producido (Arte / Video):</span>
+                    <span className="text-[11px] text-indigo-600 truncate max-w-sm block">{viewingPost.enlaceMaterialFinal}</span>
+                  </div>
+                  <a
+                    href={viewingPost.enlaceMaterialFinal}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shrink-0 transition-colors shadow-2xs"
+                  >
+                    <span>Ver Material</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer: Acciones del Cliente para este Post */}
+            <div className="bg-slate-50 border-t border-slate-200 p-4 px-5 shrink-0 space-y-3">
+              {/* Caso 1: Post ya aprobado previamente en base de datos */}
+              {postStatusMap.get(viewingPost.id)?.isApproved ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2 text-emerald-800 text-xs font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Esta publicación ya fue autorizada por ti para producción técnica.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (viewingPostIndex < odtPosts.length - 1) {
+                          handleNextPost();
+                        } else {
+                          setViewingPost(null);
+                        }
+                      }}
+                      className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      {viewingPostIndex < odtPosts.length - 1 ? 'Ver Siguiente Post →' : 'Cerrar'}
+                    </button>
+                  </div>
+                </div>
+              ) : isModalChangeActive || viewingPost.id in postChanges ? (
+                /* Caso 2: El cliente solicita cambios en este post */
+                <div className="space-y-2.5 bg-amber-50 p-3.5 rounded-xl border border-amber-300">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                      <MessageSquare className="w-4 h-4 text-amber-700" />
+                      Observación para el Post #{viewingPost.numeroInterno} ({viewingPost.redSocial}):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleMarkApproved(viewingPost.id);
+                        setIsModalChangeActive(false);
+                        setModalComment('');
+                      }}
+                      className="text-[11px] text-slate-500 hover:text-emerald-700 font-semibold underline cursor-pointer"
+                    >
+                      Descartar y marcar como Aprobado
+                    </button>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={modalComment}
+                    onChange={(e) => {
+                      setModalComment(e.target.value);
+                      updatePostChangeComment(viewingPost.id, e.target.value);
+                    }}
+                    placeholder="Describe aquí los ajustes que necesitas en el copy in, caption, tono o llamada a la acción..."
+                    className="w-full text-xs p-2.5 rounded-xl border border-amber-300 bg-white text-slate-800 focus:ring-1 focus:ring-amber-500"
+                    autoFocus
+                  />
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-amber-800">
+                      Esta observación se incluirá al enviar tu dictamen al ejecutivo.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (viewingPostIndex < odtPosts.length - 1) {
+                          handleNextPost();
+                        } else {
+                          setViewingPost(null);
+                        }
+                      }}
+                      className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                    >
+                      Guardar y Continuar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Caso 3: Post pendiente de dictamen */
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="text-xs text-slate-500">
+                    {explicitlyApproved[viewingPost.id] ? (
+                      <span className="text-emerald-700 font-bold flex items-center gap-1">
+                        <Check className="w-4 h-4" /> Marcado como listo para aprobar
+                      </span>
+                    ) : (
+                      <span>¿El copy de esta publicación cumple con lo solicitado?</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsModalChangeActive(true);
+                      }}
+                      className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Solicitar Cambios</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleMarkApproved(viewingPost.id);
+                        if (viewingPostIndex < odtPosts.length - 1) {
+                          handleNextPost();
+                        }
+                      }}
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Aprobar este Post</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

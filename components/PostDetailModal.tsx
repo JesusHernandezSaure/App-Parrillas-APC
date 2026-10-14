@@ -85,10 +85,11 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     : ['Instagram', 'Facebook', 'LinkedIn', 'TikTok', 'X (Twitter)', 'YouTube'];
   const [targetDuplicateRed, setTargetDuplicateRed] = useState(availableRedes[0] || 'Instagram');
 
-  // Modo edición de textos y especificaciones
+  // Modo edición de textos y especificaciones (bloqueado para clientes)
   const [isEditing, setIsEditing] = useState<boolean>(() => {
+    if (currentUser.role === 'Cliente') return false;
     if (initialEditMode !== undefined) return initialEditMode;
-    return post.estado === 'Ajustes de Copy' || post.estado === 'Redacción de Copy' || post.estado === 'Cambios solicitados por Cliente';
+    return post.estado === 'Ajustes de Copy' || post.estado === 'En Community' || post.estado === 'Borrador' || post.estado === 'Cambios solicitados por Cliente';
   });
 
   const [editCopyIn, setEditCopyIn] = useState(post.copyIn || '');
@@ -689,7 +690,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         <span>Guardar Cambios</span>
                       </button>
 
-                      {odt && onSendToReview && (post.estado === 'Ajustes de Copy' || post.estado === 'Redacción de Copy' || post.estado === 'Cambios solicitados por Cliente') && (
+                      {odt && onSendToReview && (post.estado === 'Ajustes de Copy' || post.estado === 'En Community' || post.estado === 'Borrador' || post.estado === 'Cambios solicitados por Cliente') && (
                         <button
                           type="button"
                           onClick={handleSaveAndSendToReview}

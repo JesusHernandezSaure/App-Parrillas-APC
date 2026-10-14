@@ -154,7 +154,7 @@ export const App: React.FC = () => {
   const [detailInitialEditMode, setDetailInitialEditMode] = useState(false);
   
   const [isApprovalOpen, setIsApprovalOpen] = useState(false);
-  const [approvalType, setApprovalType] = useState<'medico' | 'correccion_copy' | 'correccion_material' | 'medico_material' | 'aprobacion_interna_final' | 'cliente_copy' | 'cliente_material'>('medico');
+  const [approvalType, setApprovalType] = useState<'medico' | 'correccion_copy' | 'correccion_material' | 'medico_material' | 'aprobacion_interna_final' | 'cliente_copy' | 'cliente_material' | 'esperando_ejecutivo'>('medico');
 
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [isInterventionOpen, setIsInterventionOpen] = useState(false);
@@ -509,6 +509,9 @@ export const App: React.FC = () => {
       tipoMaterial?: MaterialType;
       dimensiones?: string;
       nivelPrioridad?: PriorityLevel;
+      requiereArtePrevio?: boolean;
+      enlaceEditableArte?: string;
+      notasArteParaVideo?: string;
     }
   ) => {
     const updated = posts.map(p => {
@@ -644,7 +647,7 @@ export const App: React.FC = () => {
   // 5. Dictamen de Aprobación o Solicitud de Cambios (Médico, Corrector, Ejecutivo Interno, Cliente)
   const handleApprovalDecision = (
     post: Post, 
-    type: 'medico' | 'correccion_copy' | 'correccion_material' | 'medico_material' | 'aprobacion_interna_final' | 'cliente_copy' | 'cliente_material',
+    type: 'medico' | 'correccion_copy' | 'correccion_material' | 'medico_material' | 'aprobacion_interna_final' | 'cliente_copy' | 'cliente_material' | 'esperando_ejecutivo',
     isApproved: boolean,
     comment: string,
     extraOptions?: { requiereRevisionMedica?: boolean }
@@ -795,6 +798,18 @@ export const App: React.FC = () => {
         nextRespName = odt.ejecutivoName;
         nextRespId = odt.ejecutivoId;
       }
+    } else if (type === 'esperando_ejecutivo') {
+      if (isApproved) {
+        nextStatus = 'Aprobación Copy Cliente';
+        nextArea = 'Cliente';
+        nextRespName = 'Cliente';
+        nextRespId = odt.clientId;
+      } else {
+        nextStatus = 'Ajustes de Copy';
+        nextArea = 'Community';
+        nextRespName = odt.communityName;
+        nextRespId = odt.communityId;
+      }
     }
 
     const actionText = isApproved ? `Aprobación en ${type}` : `Cambios solicitados en ${type}`;
@@ -914,7 +929,7 @@ export const App: React.FC = () => {
       targetPlataforma = dataOrDate.plataformaProgramacion;
       targetEnlaces = dataOrDate.enlaces;
     } else {
-      targetDate = dataOrDate;
+      targetDate = typeof dataOrDate === 'string' ? dataOrDate : '';
       if (legacyUrl) {
         targetEnlaces = [{
           id: 'link-' + Date.now(),
@@ -1679,7 +1694,7 @@ export const App: React.FC = () => {
             }}
             onSelectPost={(post, startEditing?: boolean) => {
               setActiveModalPost(post);
-              setDetailInitialEditMode(Boolean(startEditing !== undefined ? startEditing : (post.estado === 'Ajustes de Copy' || post.estado === 'Redacción de Copy' || post.estado === 'Cambios solicitados por Cliente')));
+              setDetailInitialEditMode(Boolean(startEditing !== undefined ? startEditing : (post.estado === 'Ajustes de Copy' || post.estado === 'En Community' || post.estado === 'Borrador' || post.estado === 'Cambios solicitados por Cliente')));
               setIsDetailOpen(true);
             }}
             onUpdatePost={handleUpdatePostContent}

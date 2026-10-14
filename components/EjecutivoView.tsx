@@ -11,6 +11,7 @@ import {
   getDaysInCurrentStage, getPostPacing 
 } from './PostPipelineTracker';
 import { RichTextDisplay, stripHtml } from './RichTextDisplay';
+import { PostContentFourPanels } from './PostContentFourPanels';
 
 interface EjecutivoViewProps {
   clients: Client[];
@@ -65,9 +66,9 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
 
   const isOdtCreator = canCreateOdt !== false && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin');
 
-  // Clientes asignados a este ejecutivo (o todos si es Admin o Super Admin)
+  // Clientes asignados a este ejecutivo (o todos si es Admin, Super Admin o Community)
   const myClients = useMemo(() => {
-    if (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') return clients;
+    if (currentUser.role === 'Admin' || currentUser.role === 'Super Admin' || currentUser.role === 'Community') return clients;
     return clients.filter(c => 
       c.ejecutivoId === currentUser.id ||
       odts.some(o => o.clientId === c.id && (
@@ -910,8 +911,8 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                             </button>
                           )}
 
-                          {/* Acción: Aprobación Interna Final */}
-                          {isInternalFinal && (
+                          {/* Acción: Aprobación Interna Final (Exclusivo Ejecutivo / Admin / Super Admin) */}
+                          {isInternalFinal && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && (
                             <button
                               onClick={() => onOpenApprovalModal?.(post, 'aprobacion_interna_final')}
                               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
@@ -921,8 +922,8 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                             </button>
                           )}
 
-                          {/* Acción Rápida: Enviar a Cliente si está en 'Esperando Ejecutivo' */}
-                          {isWaitingExec && (
+                          {/* Acción Rápida: Enviar a Cliente si está en 'Esperando Ejecutivo' (Exclusivo Ejecutivo / Admin / Super Admin) */}
+                          {isWaitingExec && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && (
                             <button
                               onClick={() => onSendToClientApproval(post, activeOdt)}
                               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
@@ -932,15 +933,17 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                             </button>
                           )}
 
-                          {/* Botón de Intervención / Reasignación de Supervisor */}
-                          <button
-                            onClick={() => onOpenIntervention(post)}
-                            title="Intervención manual de supervisor (Reasignar o Devolver)"
-                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-slate-200 transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                          >
-                            <ShieldAlert className="w-4 h-4 text-indigo-500" />
-                            <span className="hidden sm:inline">Intervenir</span>
-                          </button>
+                          {/* Botón de Intervención / Reasignación de Supervisor (Exclusivo Ejecutivo / Admin / Super Admin) */}
+                          {(currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && (
+                            <button
+                              onClick={() => onOpenIntervention(post)}
+                              title="Intervención manual de supervisor (Reasignar o Devolver)"
+                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-slate-200 transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                            >
+                              <ShieldAlert className="w-4 h-4 text-indigo-500" />
+                              <span className="hidden sm:inline">Intervenir</span>
+                            </button>
+                          )}
 
                           {/* Ver Ficha Completa */}
                           <button
@@ -967,26 +970,20 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                         </div>
                       )}
 
-                      {/* Textos Preview y Responsable */}
-                      <div className="space-y-1">
-                        <div className="text-xs text-slate-700 max-w-3xl">
-                          <span className="font-bold text-slate-900 mr-1">Copy In:</span>
-                          <RichTextDisplay content={post.copyIn} fallbackText="Sin copy in" className="inline-block" />
-                        </div>
+                      {/* Espacio Central en 4 Divisiones: Copy In, Copy Out, Enlace de Referencia, Material Entregado Arte/AV */}
+                      <PostContentFourPanels 
+                        post={post} 
+                        onEdit={() => onSelectPost(post)}
+                        canEdit={currentUser.role === 'Community' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin'}
+                      />
 
-                        <div className="text-xs text-slate-500 flex items-center gap-3 flex-wrap">
-                          <span>Resp: <strong className="text-slate-700">{post.areaResponsable} ({post.responsableActualName || 'Sin asignar'})</strong></span>
-                          {post.enlaceMaterialFinal && (
-                            <a
-                              href={post.enlaceMaterialFinal}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-emerald-600 hover:underline font-semibold inline-flex items-center gap-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <ExternalLink className="w-3 h-3" /> Material OneDrive/Drive
-                            </a>
-                          )}
+                      {/* Información de Responsable y Área */}
+                      <div className="text-xs text-slate-500 flex items-center justify-between gap-3 flex-wrap px-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400 font-semibold">Responsable actual:</span>
+                          <span className="font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200">
+                            {post.areaResponsable} • {post.responsableActualName || 'Sin asignar'}
+                          </span>
                         </div>
                       </div>
 

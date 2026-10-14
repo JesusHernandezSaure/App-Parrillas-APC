@@ -3,10 +3,11 @@ import { Post, ODT, Client, User } from '../types';
 import { 
   Sparkles, CheckCircle2, Clock, Globe, Plus, Send, ExternalLink, 
   Layers, Info, ShieldAlert, ShieldCheck, AlertTriangle, Edit3,
-  Copy, RefreshCw, X, Calendar, Share2
+  Copy, RefreshCw, X, Calendar, Share2, UserCheck
 } from 'lucide-react';
 import { EjecutivoView } from './EjecutivoView';
 import { RichTextDisplay } from './RichTextDisplay';
+import { PostContentFourPanels } from './PostContentFourPanels';
 
 interface CommunityViewProps {
   odts: ODT[];
@@ -73,42 +74,51 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
     onSelectOdt?.(id);
   };
 
-  // Verificación de asignación estricta para Community Manager
-  const isPostAssignedToCommunity = (p: Post) => {
-    if (currentUser.role !== 'Community') return true;
-    if (p.responsableActualId && p.responsableActualId === currentUser.id) return true;
-    const odt = odts.find(o => o.id === p.odtId);
-    if (!odt) return false;
+  // Filtro de alcance: 'all' (todas las parrillas de la agencia) o 'mine' (solo asignadas a mí)
+  // Por defecto 'all' para que todos los Community Managers puedan ver y trabajar en cualquier parrilla
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'mine'>('all');
+
+  // Verificación de si un post u ODT está asignado directamente al Community
+  const isOdtAssignedToCommunity = (o: ODT) => {
     return (
-      odt.communityId === currentUser.id ||
-      (odt.communityName && odt.communityName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      o.communityId === currentUser.id ||
+      (o.communityName && o.communityName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
     );
   };
 
-  // Parrillas y clientes asignados al Community
-  const communityOdts = useMemo(() => {
-    if (currentUser.role === 'Community') {
-      return odts.filter(o => 
-        o.communityId === currentUser.id ||
-        (o.communityName && o.communityName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
-      );
-    }
-    return odts;
+  const isPostAssignedToCommunity = (p: Post) => {
+    if (p.responsableActualId && p.responsableActualId === currentUser.id) return true;
+    const odt = odts.find(o => o.id === p.odtId);
+    if (!odt) return false;
+    return isOdtAssignedToCommunity(odt);
+  };
+
+  // Conteo de ODTs asignadas directamente a este CM
+  const myAssignedOdtsCount = useMemo(() => {
+    return odts.filter(isOdtAssignedToCommunity).length;
   }, [odts, currentUser]);
 
+  // Parrillas y clientes visibles para el Community según el filtro de alcance
+  const communityOdts = useMemo(() => {
+    if (scopeFilter === 'mine') {
+      return odts.filter(isOdtAssignedToCommunity);
+    }
+    return odts;
+  }, [odts, scopeFilter, currentUser]);
+
   const communityClients = useMemo(() => {
-    if (currentUser.role === 'Community') {
+    if (scopeFilter === 'mine') {
       return clients.filter(c => communityOdts.some(o => o.clientId === c.id));
     }
     return clients;
-  }, [clients, communityOdts, currentUser]);
+  }, [clients, communityOdts, scopeFilter]);
 
   const communityPosts = useMemo(() => {
-    if (currentUser.role === 'Community') {
+    if (scopeFilter === 'mine') {
       return posts.filter(p => communityOdts.some(o => o.id === p.odtId));
     }
     return posts;
-  }, [posts, communityOdts, currentUser]);
+  }, [posts, communityOdts, scopeFilter]);
 
   // Bandeja 1: "Lo que tengo que hacer" (Creación de copy, Borradores, y Ajustes solicitados por Médico/QA/Cliente)
   const pendingActionPosts = useMemo(() => {
@@ -117,30 +127,30 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       p.estado === 'En Community' || 
       p.estado === 'Ajustes de Copy' ||
       p.estado === 'Cambios solicitados por Cliente') &&
-      isPostAssignedToCommunity(p)
+      (scopeFilter === 'all' || isPostAssignedToCommunity(p))
     );
-  }, [posts, odts, currentUser]);
+  }, [posts, odts, currentUser, scopeFilter]);
 
   // Bandeja 2: "LISTO PARA PUBLICAR" y "PROGRAMADOS"
   const readyToPublishPosts = useMemo(() => {
     return posts.filter(p => 
       (p.estado === 'Listo para Publicar' || p.estado === 'Programado') &&
-      isPostAssignedToCommunity(p)
+      (scopeFilter === 'all' || isPostAssignedToCommunity(p))
     );
-  }, [posts, odts, currentUser]);
+  }, [posts, odts, currentUser, scopeFilter]);
 
   // Bandeja 3: "Publicados"
   const publishedPosts = useMemo(() => {
     return posts.filter(p => 
       p.estado === 'Publicado' &&
-      isPostAssignedToCommunity(p)
+      (scopeFilter === 'all' || isPostAssignedToCommunity(p))
     );
-  }, [posts, odts, currentUser]);
+  }, [posts, odts, currentUser, scopeFilter]);
 
   return (
     <div className="space-y-6">
       
-      {/* Selector de Bandejas y Pestañas */}
+      {/* Selector de Bandejas, Pestañas y Conmutador de Alcance */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-2xs">
         <div className="flex items-center gap-2 flex-wrap">
           {/* Pestaña Principal: Parrillas & Posts con permisos de Ejecutivo y Creación de Posts */}
@@ -153,7 +163,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             }`}
           >
             <Layers className="w-4 h-4 text-emerald-400" />
-            <span>Parrillas & Posts (Control Total)</span>
+            <span>Parrillas & Posts</span>
             <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
               activeTab === 'parrillas' ? 'bg-slate-800 text-emerald-300' : 'bg-slate-200 text-slate-700'
             }`}>
@@ -210,6 +220,37 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             <span>Publicados ({publishedPosts.length})</span>
           </button>
         </div>
+
+        {/* Conmutador de Alcance de Visibilidad */}
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <button
+            type="button"
+            onClick={() => setScopeFilter('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              scopeFilter === 'all'
+                ? 'bg-white text-indigo-700 shadow-2xs font-extrabold'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+            title="Ver todas las parrillas, clientes y publicaciones de la agencia"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Ver Todo ({clients.length} Clientes • {odts.length} Parrillas)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setScopeFilter('mine')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              scopeFilter === 'mine'
+                ? 'bg-white text-indigo-700 shadow-2xs font-extrabold'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+            title="Filtrar únicamente las parrillas donde estás asignado como Community"
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Solo mis asignadas ({myAssignedOdtsCount})</span>
+          </button>
+        </div>
       </div>
 
       {/* VISTA 1: GESTIÓN INTEGRAL DE PARRILLAS & POSTS (PERMISOS DE EJECUTIVO + CREACIÓN DE POSTS) */}
@@ -221,10 +262,14 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             </div>
             <div className="text-xs space-y-1">
               <p className="font-bold text-emerald-950 text-sm">
-                Permisos Unificados de Gestión y Creación Activos ({currentUser.name})
+                {scopeFilter === 'all' ? 'Visibilidad Global Habilitada' : 'Parrillas Asignadas Activas'} ({currentUser.name})
               </p>
               <p className="text-emerald-800 leading-relaxed">
-                Mostrando tus <strong>{communityOdts.length} parrilla(s) asignada(s)</strong> con acceso integral a creación de posts, copys y envío a revisión obligatoria.
+                {scopeFilter === 'all' ? (
+                  <>Acceso para consultar y operar en <strong>{communityClients.length} cliente(s)</strong> y <strong>{communityOdts.length} parrilla(s)</strong> de la agencia con <strong>{communityPosts.length} post(s)</strong>. Puedes crear posts en cualquier parrilla, redactar o ajustar copys, duplicar, reciclar y enviarlos a revisión.</>
+                ) : (
+                  <>Mostrando únicamente tus <strong>{communityOdts.length} parrilla(s) asignada(s)</strong> directamente con acceso a creación de posts, copys y envío a revisión.</>
+                )}
               </p>
             </div>
           </div>
@@ -322,42 +367,21 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                         </span>
                       </div>
 
-                      {/* Copy In & Copy Out */}
-                      <div className="space-y-1.5">
-                        {post.copyIn && (
-                          <div className="text-xs text-slate-900 font-semibold">
-                            <span className="text-slate-400 uppercase font-bold text-[10px] block">Copy In:</span>
-                            <RichTextDisplay content={post.copyIn} fallbackText="Sin copy in" showCopyButton copyButtonLabel="Copiar" />
-                          </div>
-                        )}
-                        <div className="text-xs text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-200/60">
-                          <span className="text-slate-500 font-bold text-[10px] uppercase block mb-0.5">Copy Out:</span>
-                          <RichTextDisplay content={post.copyOut} fallbackText="Sin caption" showCopyButton copyButtonLabel="Copiar" />
-                        </div>
-                      </div>
+                      {/* Espacio Central en 4 Divisiones: Copy In, Copy Out, Enlace de Referencia, Material Entregado Arte/AV */}
+                      <PostContentFourPanels 
+                        post={post} 
+                        onEdit={() => onSelectPost(post, true)}
+                        canEdit={true}
+                      />
 
-                      {/* Enlace al material final */}
-                      <div className="pt-1 flex items-center gap-2 flex-wrap">
-                        {post.enlaceMaterialFinal ? (
-                          <a
-                            href={post.enlaceMaterialFinal}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 transition-colors"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            Abrir Material Final Autorizado (OneDrive/Drive)
-                          </a>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic">Sin enlace de material</span>
-                        )}
-
-                        {isProgramado && post.plataformaProgramacion && (
-                          <span className="text-xs text-violet-800 bg-violet-50 border border-violet-200 px-2.5 py-1.5 rounded-lg font-medium">
+                      {isProgramado && post.plataformaProgramacion && (
+                        <div className="pt-1">
+                          <span className="text-xs text-violet-800 bg-violet-50 border border-violet-200 px-2.5 py-1 rounded-lg font-medium inline-flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5" />
                             Programado vía: <strong>{post.plataformaProgramacion}</strong>
                           </span>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Botones principales */}
@@ -405,7 +429,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             <div>
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Clock className="w-5 h-5 text-indigo-600" />
-                Mis Posts Pendientes de Copy y Ajustes
+                {scopeFilter === 'all' ? 'Posts Pendientes de Copy y Ajustes (Agencia)' : 'Mis Posts Pendientes de Copy y Ajustes'}
               </h3>
               <p className="text-xs text-slate-500">
                 Redacta o actualiza el copy de los posts y envíalos a revisión médica o de estilo.
@@ -547,41 +571,12 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 text-xs space-y-2">
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Copy In (Texto sobre imagen):</span>
-                          <button
-                            onClick={() => onSelectPost(post, true)}
-                            className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
-                            title="Editar Copy In"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                            <span>Editar</span>
-                          </button>
-                        </div>
-                        <div className="mt-1">
-                          <RichTextDisplay content={post.copyIn} fallbackText="Pendiente de redacción" showCopyButton copyButtonLabel="Copiar" />
-                        </div>
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-200/60">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-500 uppercase text-[10px] tracking-wider">Copy Out (Texto del post / Caption):</span>
-                          <button
-                            onClick={() => onSelectPost(post, true)}
-                            className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
-                            title="Editar Copy Out"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                            <span>Editar</span>
-                          </button>
-                        </div>
-                        <div className="mt-1">
-                          <RichTextDisplay content={post.copyOut} fallbackText="Pendiente de redacción" showCopyButton copyButtonLabel="Copiar" />
-                        </div>
-                      </div>
-                    </div>
+                    {/* Espacio Central en 4 Divisiones: Copy In, Copy Out, Enlace de Referencia, Material Entregado Arte/AV */}
+                    <PostContentFourPanels 
+                      post={post} 
+                      onEdit={() => onSelectPost(post, true)}
+                      canEdit={true}
+                    />
 
                     {clientObservation && (
                       <div className="p-3.5 rounded-xl bg-amber-50 border-2 border-amber-300 text-xs text-amber-950 flex items-start gap-2.5 shadow-2xs">

@@ -9,7 +9,7 @@ interface ApprovalModalProps {
   post: Post;
   odt?: ODT;
   currentUser: User;
-  type: 'medico' | 'correccion_copy' | 'correccion_material' | 'medico_material' | 'aprobacion_interna_final' | 'cliente_copy' | 'cliente_material';
+  type: 'medico' | 'correccion_copy' | 'correccion_material' | 'medico_material' | 'aprobacion_interna_final' | 'cliente_copy' | 'cliente_material' | 'esperando_ejecutivo';
   onClose: () => void;
   onApprove: (comment: string, extraOptions?: { requiereRevisionMedica?: boolean }) => void;
   onRequestChanges: (comment: string) => void;
@@ -36,6 +36,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
       case 'correccion_material': return 'Corrección Final de Material';
       case 'medico_material': return 'Revisión Médica de Material Final';
       case 'aprobacion_interna_final': return 'Aprobación Interna Final (Ejecutivo)';
+      case 'esperando_ejecutivo': return 'Revisión de Ejecutivo previa a Cliente';
       case 'cliente_copy': return 'Aprobación de Copy (Cliente)';
       case 'cliente_material': return 'Aprobación de Material';
     }
@@ -52,7 +53,8 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
             : 'Corrección final aprobada. Pasará a Aprobación Interna Final con el Ejecutivo dueño de la ODT.';
         case 'medico_material': return 'Visto bueno médico otorgado. El Post pasará a Aprobación Interna Final con el Ejecutivo.';
         case 'aprobacion_interna_final': return '¡Aprobado para publicación! Pasará inmediatamente a la bandeja "Listo para Publicar" del Community Manager.';
-        case 'cliente_copy': return post.tipoMaterial === 'Video' || post.tipoMaterial === 'Reel' || post.tipoMaterial === 'Animación'
+        case 'esperando_ejecutivo': return 'El Post pasará a la parrilla lista para revisión y visto bueno del Cliente.';
+        case 'cliente_copy': return post.tipoMaterial === 'Video'
           ? 'Copy aprobado. El Post pasará a Producción de Audio y Video.'
           : 'Copy aprobado. El Post pasará a Producción de Arte/Diseño.';
         case 'cliente_material': return 'Material aprobado.';
@@ -63,6 +65,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
         case 'correccion_copy': return 'El Post regresará al Community Manager a la etapa "Ajustes de Copy".';
         case 'correccion_material': return 'El Post regresará al área de producción correspondiente (Arte o Audio/Video) para ajustes técnicos.';
         case 'medico_material': return 'El Post regresará al área de producción técnica para corregir los claims o elementos médicos.';
+        case 'esperando_ejecutivo': return 'El Post regresará a Corrección o Ajustes según tus observaciones.';
         case 'aprobacion_interna_final': return 'El Post se devolverá a Producción o Corrección para ajustes antes de su autorización final.';
         case 'cliente_copy': return 'Se registrarán las observaciones del cliente y pasará al Ejecutivo de Cuentas para coordinar los ajustes.';
         case 'cliente_material': return 'Se registrarán las observaciones.';

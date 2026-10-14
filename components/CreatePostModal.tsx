@@ -138,6 +138,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       nivelPrioridad,
       copyIn: copyIn.trim(),
       copyOut: copyOut.trim(),
+      enlaceReferencia: '',
       enlaceMaterialFinal: '',
       requiereArtePrevio: tipoMaterial === 'Video' ? requiereArtePrevio : false,
       enlaceEditableArte: '',
