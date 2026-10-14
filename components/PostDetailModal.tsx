@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { getNowTimestamp } from '../services/odtService';
 import { PostStageMap } from './PostPipelineTracker';
+import { RichTextEditor } from './RichTextEditor';
+import { RichTextDisplay } from './RichTextDisplay';
 
 interface PostDetailModalProps {
   post: Post;
@@ -548,47 +550,35 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
                   {/* COPY IN */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                        <span>Copy In (Texto sobre la imagen / gráfica)</span>
-                      </label>
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        {editCopyIn.length} caracteres
-                      </span>
-                    </div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                      <span>Copy In (Texto enriquecido sobre la imagen / gráfica)</span>
+                    </label>
                     <p className="text-[11px] text-slate-500">
                       Texto conciso y de alto impacto que el equipo de diseño integrará dentro del arte visual.
                     </p>
-                    <textarea
-                      rows={3}
+                    <RichTextEditor
                       value={editCopyIn}
-                      onChange={(e) => setEditCopyIn(e.target.value)}
-                      placeholder="Escribe el copy in que irá sobre la imagen o arte..."
-                      className="w-full text-xs p-3 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-medium text-slate-900 leading-relaxed shadow-2xs"
+                      onChange={setEditCopyIn}
+                      placeholder="Escribe el copy in enriquecido que irá sobre la imagen o arte..."
+                      minHeight="85px"
                     />
                   </div>
 
                   {/* COPY OUT */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                        <span>Copy Out (Texto de la publicación / Caption)</span>
-                      </label>
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        {editCopyOut.length} caracteres
-                      </span>
-                    </div>
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
+                      <span>Copy Out (Texto enriquecido de la publicación / Caption)</span>
+                    </label>
                     <p className="text-[11px] text-slate-500">
                       Copy del post, descripción detallada, hashtags y llamada a la acción (CTA) para el feed.
                     </p>
-                    <textarea
-                      rows={6}
+                    <RichTextEditor
                       value={editCopyOut}
-                      onChange={(e) => setEditCopyOut(e.target.value)}
-                      placeholder="Escribe el caption o copy out completo para la publicación..."
-                      className="w-full text-xs p-3 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 leading-relaxed shadow-2xs"
+                      onChange={setEditCopyOut}
+                      placeholder="Escribe el caption o copy out completo enriquecido para la publicación..."
+                      minHeight="130px"
                     />
                   </div>
 
@@ -730,9 +720,12 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         </button>
                       )}
                     </div>
-                    <p className="text-sm font-medium text-slate-900 whitespace-pre-wrap">
-                      {post.copyIn || <span className="text-slate-400 italic">Sin texto en gráfica</span>}
-                    </p>
+                    <RichTextDisplay
+                      content={post.copyIn}
+                      fallbackText="Sin texto en gráfica"
+                      showCopyButton
+                      copyButtonLabel="Copiar Copy In"
+                    />
                   </div>
 
                   <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 relative group">
@@ -750,9 +743,12 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         </button>
                       )}
                     </div>
-                    <p className="text-sm font-normal text-slate-800 whitespace-pre-wrap leading-relaxed">
-                      {post.copyOut || <span className="text-slate-400 italic">Sin caption</span>}
-                    </p>
+                    <RichTextDisplay
+                      content={post.copyOut}
+                      fallbackText="Sin caption"
+                      showCopyButton
+                      copyButtonLabel="Copiar Caption"
+                    />
                   </div>
 
                   {canEdit && (

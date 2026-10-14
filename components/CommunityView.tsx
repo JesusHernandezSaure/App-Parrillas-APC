@@ -6,6 +6,7 @@ import {
   Copy, RefreshCw, X, Calendar, Share2
 } from 'lucide-react';
 import { EjecutivoView } from './EjecutivoView';
+import { RichTextDisplay } from './RichTextDisplay';
 
 interface CommunityViewProps {
   odts: ODT[];
@@ -72,25 +73,69 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
     onSelectOdt?.(id);
   };
 
+  // Verificación de asignación estricta para Community Manager
+  const isPostAssignedToCommunity = (p: Post) => {
+    if (currentUser.role !== 'Community') return true;
+    if (p.responsableActualId && p.responsableActualId === currentUser.id) return true;
+    const odt = odts.find(o => o.id === p.odtId);
+    if (!odt) return false;
+    return (
+      odt.communityId === currentUser.id ||
+      (odt.communityName && odt.communityName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+  };
+
+  // Parrillas y clientes asignados al Community
+  const communityOdts = useMemo(() => {
+    if (currentUser.role === 'Community') {
+      return odts.filter(o => 
+        o.communityId === currentUser.id ||
+        (o.communityName && o.communityName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      );
+    }
+    return odts;
+  }, [odts, currentUser]);
+
+  const communityClients = useMemo(() => {
+    if (currentUser.role === 'Community') {
+      return clients.filter(c => communityOdts.some(o => o.clientId === c.id));
+    }
+    return clients;
+  }, [clients, communityOdts, currentUser]);
+
+  const communityPosts = useMemo(() => {
+    if (currentUser.role === 'Community') {
+      return posts.filter(p => communityOdts.some(o => o.id === p.odtId));
+    }
+    return posts;
+  }, [posts, communityOdts, currentUser]);
+
   // Bandeja 1: "Lo que tengo que hacer" (Creación de copy, Borradores, y Ajustes solicitados por Médico/QA/Cliente)
   const pendingActionPosts = useMemo(() => {
     return posts.filter(p => 
-      p.estado === 'Borrador' || 
+      (p.estado === 'Borrador' || 
       p.estado === 'En Community' || 
       p.estado === 'Ajustes de Copy' ||
-      p.estado === 'Cambios solicitados por Cliente'
+      p.estado === 'Cambios solicitados por Cliente') &&
+      isPostAssignedToCommunity(p)
     );
-  }, [posts]);
+  }, [posts, odts, currentUser]);
 
   // Bandeja 2: "LISTO PARA PUBLICAR" y "PROGRAMADOS"
   const readyToPublishPosts = useMemo(() => {
-    return posts.filter(p => p.estado === 'Listo para Publicar' || p.estado === 'Programado');
-  }, [posts]);
+    return posts.filter(p => 
+      (p.estado === 'Listo para Publicar' || p.estado === 'Programado') &&
+      isPostAssignedToCommunity(p)
+    );
+  }, [posts, odts, currentUser]);
 
   // Bandeja 3: "Publicados"
   const publishedPosts = useMemo(() => {
-    return posts.filter(p => p.estado === 'Publicado');
-  }, [posts]);
+    return posts.filter(p => 
+      p.estado === 'Publicado' &&
+      isPostAssignedToCommunity(p)
+    );
+  }, [posts, odts, currentUser]);
 
   return (
     <div className="space-y-6">
@@ -112,7 +157,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
               activeTab === 'parrillas' ? 'bg-slate-800 text-emerald-300' : 'bg-slate-200 text-slate-700'
             }`}>
-              {odts.length} ODTs • {posts.length} Posts
+              {communityOdts.length} ODTs • {communityPosts.length} Posts
             </span>
           </button>
 
@@ -176,19 +221,18 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             </div>
             <div className="text-xs space-y-1">
               <p className="font-bold text-emerald-950 text-sm">
-                Permisos Unificados de Gestión y Creación Activos (Community Manager)
+                Permisos Unificados de Gestión y Creación Activos ({currentUser.name})
               </p>
               <p className="text-emerald-800 leading-relaxed">
-                Los Ejecutivos de Cuenta inician la creación de la ODT/Parrilla comercial y el brief. 
-                Como Community Manager, tienes <strong>acceso integral a las parrillas, el embudo de etapas y supervisión de SLAs</strong>, con la facultad exclusiva y directa de <strong>crear los posts</strong> dentro de cada ODT, gestionar sus copys y enviar las piezas a revisión médica o control de calidad.
+                Mostrando tus <strong>{communityOdts.length} parrilla(s) asignada(s)</strong> con acceso integral a creación de posts, copys y envío a revisión obligatoria.
               </p>
             </div>
           </div>
 
           <EjecutivoView
-            clients={clients}
-            odts={odts}
-            posts={posts}
+            clients={communityClients}
+            odts={communityOdts}
+            posts={communityPosts}
             currentUser={currentUser}
             canCreateOdt={false}
             selectedClientId={activeClientId || undefined}
@@ -279,17 +323,17 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       </div>
 
                       {/* Copy In & Copy Out */}
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {post.copyIn && (
-                          <p className="text-xs text-slate-900 font-semibold truncate">
-                            <span className="text-slate-400 uppercase font-bold mr-1">Copy In:</span>
-                            {post.copyIn}
-                          </p>
+                          <div className="text-xs text-slate-900 font-semibold">
+                            <span className="text-slate-400 uppercase font-bold text-[10px] block">Copy In:</span>
+                            <RichTextDisplay content={post.copyIn} fallbackText="Sin copy in" showCopyButton copyButtonLabel="Copiar" />
+                          </div>
                         )}
-                        <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-200/60">
-                          <span className="text-slate-500 font-bold mr-1">Copy Out:</span>
-                          {post.copyOut}
-                        </p>
+                        <div className="text-xs text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-200/60">
+                          <span className="text-slate-500 font-bold text-[10px] uppercase block mb-0.5">Copy Out:</span>
+                          <RichTextDisplay content={post.copyOut} fallbackText="Sin caption" showCopyButton copyButtonLabel="Copiar" />
+                        </div>
                       </div>
 
                       {/* Enlace al material final */}
@@ -516,9 +560,9 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                             <span>Editar</span>
                           </button>
                         </div>
-                        <p className="font-medium text-slate-900 mt-0.5 whitespace-pre-wrap">
-                          {post.copyIn || <span className="text-slate-400 italic font-normal">Pendiente de redacción</span>}
-                        </p>
+                        <div className="mt-1">
+                          <RichTextDisplay content={post.copyIn} fallbackText="Pendiente de redacción" showCopyButton copyButtonLabel="Copiar" />
+                        </div>
                       </div>
 
                       <div className="pt-2 border-t border-slate-200/60">
@@ -533,9 +577,9 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                             <span>Editar</span>
                           </button>
                         </div>
-                        <p className="font-normal text-slate-700 mt-0.5 line-clamp-3 leading-relaxed whitespace-pre-wrap">
-                          {post.copyOut || <span className="text-slate-400 italic">Pendiente de redacción</span>}
-                        </p>
+                        <div className="mt-1">
+                          <RichTextDisplay content={post.copyOut} fallbackText="Pendiente de redacción" showCopyButton copyButtonLabel="Copiar" />
+                        </div>
                       </div>
                     </div>
 

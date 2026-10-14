@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Post, PostPublicationLink } from '../types';
 import { 
   CheckCircle2, Globe, Calendar, Clock, Plus, Trash2, 
-  ExternalLink, X, AlertCircle, Share2, Layers
+  ExternalLink, X, AlertCircle, Share2, Layers, Copy, Sparkles, Check
 } from 'lucide-react';
+import { RichTextDisplay, convertToUnicodeSocial } from './RichTextDisplay';
 
 const REDES_DISPONIBLES = [
   'Instagram',
@@ -213,22 +214,29 @@ export const PublishPostModal: React.FC<PublishPostModalProps> = ({
 
           {/* Ficha Resumen del Post */}
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs space-y-1.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="font-bold text-slate-700">Copy Out Autorizado:</span>
-              {post.enlaceMaterialFinal && (
-                <a
-                  href={post.enlaceMaterialFinal}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-indigo-600 hover:underline font-semibold inline-flex items-center gap-1 text-[11px]"
-                >
-                  <ExternalLink className="w-3 h-3" /> Ver Material Aprobado (Drive/OneDrive)
-                </a>
-              )}
+              <div className="flex items-center gap-2">
+                {post.enlaceMaterialFinal && (
+                  <a
+                    href={post.enlaceMaterialFinal}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 hover:underline font-semibold inline-flex items-center gap-1 text-[11px]"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Ver Material Aprobado
+                  </a>
+                )}
+              </div>
             </div>
-            <p className="text-slate-600 line-clamp-2 italic bg-white p-2 rounded-lg border border-slate-200/60">
-              "{post.copyOut}"
-            </p>
+            <div className="bg-white p-2.5 rounded-lg border border-slate-200/60">
+              <RichTextDisplay
+                content={post.copyOut}
+                fallbackText="Sin caption"
+                showCopyButton
+                copyButtonLabel="Copiar Caption"
+              />
+            </div>
           </div>
 
           {/* Fechas y Plataforma */}

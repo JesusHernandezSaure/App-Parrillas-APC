@@ -11,6 +11,7 @@ import {
   getCurrentRoundNumber,
   sanitizePostForClient 
 } from '../services/odtService';
+import { RichTextDisplay } from './RichTextDisplay';
 
 interface ClienteViewProps {
   posts: Post[];
@@ -736,22 +737,14 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                             {post.fechaPrevista}
                           </td>
                           <td className="p-3 align-top text-slate-800 leading-relaxed font-medium">
-                            {post.copyIn ? (
-                              <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 text-slate-900">
-                                {post.copyIn}
-                              </div>
-                            ) : (
-                              <span className="text-slate-400 italic">Sin copy in</span>
-                            )}
+                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                              <RichTextDisplay content={post.copyIn} fallbackText="Sin copy in" showCopyButton copyButtonLabel="Copiar" />
+                            </div>
                           </td>
                           <td className="p-3 align-top text-slate-700 leading-relaxed">
-                            {post.copyOut ? (
-                              <div className="line-clamp-4 hover:line-clamp-none transition-all">
-                                {post.copyOut}
-                              </div>
-                            ) : (
-                              <span className="text-slate-400 italic">Sin copy out</span>
-                            )}
+                            <div className="bg-slate-50/60 p-2.5 rounded-lg border border-slate-200/60">
+                              <RichTextDisplay content={post.copyOut} fallbackText="Sin copy out" showCopyButton copyButtonLabel="Copiar" />
+                            </div>
                           </td>
                           <td className="p-3 align-top text-right">
                             {isPostApproved ? (

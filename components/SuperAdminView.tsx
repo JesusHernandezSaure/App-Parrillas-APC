@@ -9,6 +9,7 @@ import {
   Eye, ArrowRight, UserCheck, Stethoscope, CheckSquare, Palette, Video, 
   ExternalLink, Lock, Unlock, AlertTriangle, RefreshCw
 } from 'lucide-react';
+import { RichTextDisplay, stripHtml } from './RichTextDisplay';
 
 interface SuperAdminViewProps {
   currentUser: User;
@@ -125,9 +126,10 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   // Filtrado de Posts
   const filteredPosts = useMemo(() => {
     return posts.filter(p => {
-      const matchSearch = p.copyIn.toLowerCase().includes(postSearch.toLowerCase()) ||
-        p.copyOut.toLowerCase().includes(postSearch.toLowerCase()) ||
-        p.numeroInterno.includes(postSearch);
+      const searchLower = postSearch.toLowerCase();
+      const matchSearch = stripHtml(p.copyIn || '').toLowerCase().includes(searchLower) ||
+        stripHtml(p.copyOut || '').toLowerCase().includes(searchLower) ||
+        (p.numeroInterno || '').includes(postSearch);
       const matchStatus = postStatusFilter === 'ALL' || p.estado === postStatusFilter;
       const matchClient = postClientFilter === 'ALL' || p.clientId === postClientFilter;
       return matchSearch && matchStatus && matchClient;
@@ -852,11 +854,13 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                         </td>
 
                         <td className="py-3.5 px-4 max-w-sm">
-                          <div className="font-medium text-slate-800 line-clamp-1">
-                            <span className="font-bold text-slate-900">In:</span> {post.copyIn || '(Sin texto aún)'}
+                          <div className="font-medium text-slate-800 line-clamp-1 text-xs">
+                            <span className="font-bold text-slate-900 mr-1">In:</span>
+                            <RichTextDisplay content={post.copyIn} fallbackText="(Sin texto aún)" className="inline" />
                           </div>
-                          <div className="text-slate-500 line-clamp-1 text-[11px]">
-                            <span className="font-semibold text-slate-700">Out:</span> {post.copyOut || '(Sin texto aún)'}
+                          <div className="text-slate-600 line-clamp-1 text-[11px] mt-0.5">
+                            <span className="font-semibold text-slate-700 mr-1">Out:</span>
+                            <RichTextDisplay content={post.copyOut} fallbackText="(Sin texto aún)" className="inline" />
                           </div>
                         </td>
 

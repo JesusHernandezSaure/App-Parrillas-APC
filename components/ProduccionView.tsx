@@ -2,8 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { Post, ODT, Client, User } from '../types';
 import { 
   Palette, Video, ExternalLink, Send, CheckCircle2, Clock, 
-  Cloud, Info, AlertCircle, Link as LinkIcon, Sparkles, ArrowRight, Layers 
+  Cloud, Info, AlertCircle, Link as LinkIcon, Sparkles, ArrowRight, Layers,
+  Filter, UserCheck, Eye 
 } from 'lucide-react';
+import { RichTextDisplay } from './RichTextDisplay';
 
 interface ProduccionViewProps {
   posts: Post[];
@@ -33,15 +35,88 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
   const [notasArteMap, setNotasArteMap] = useState<Record<string, string>>({});
   const [editableErrorsMap, setEditableErrorsMap] = useState<Record<string, string>>({});
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'Nivel 1' | 'Nivel 2' | 'Nivel 3'>('all');
+  const [selectedOdtFilter, setSelectedOdtFilter] = useState<string>('all');
 
-  // Posts de video que están actualmente en espera en el departamento de Arte
+  // Soporte para supervisores/administradores (permitir alternar entre asignadas y todas)
+  const isSupervisorOrAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'Admin' || Boolean(currentUser.permissions?.canSuperviseAll);
+  const [viewScope, setViewScope] = useState<'assigned' | 'all'>('assigned');
+
+  // Parrillas donde el usuario actual está explícitamente asignado (Arte como diseñador o AV como editor)
+  const assignedOdts = useMemo(() => {
+    return odts.filter(o => {
+      if (isArte) {
+        return (
+          o.disenadorId === currentUser.id ||
+          (o.disenadorName && o.disenadorName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+        );
+      }
+      if (isVideo) {
+        return (
+          o.editorAvId === currentUser.id ||
+          (o.editorAvName && o.editorAvName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+        );
+      }
+      return (
+        o.disenadorId === currentUser.id ||
+        o.editorAvId === currentUser.id ||
+        (o.disenadorName && o.disenadorName.trim().toLowerCase() === currentUser.name.trim().toLowerCase()) ||
+        (o.editorAvName && o.editorAvName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      );
+    });
+  }, [odts, currentUser, isArte, isVideo]);
+
+  // Verificación estricta de asignación por post u ODT
+  const isPostAssignedToUser = (post: Post) => {
+    if (isSupervisorOrAdmin && viewScope === 'all') return true;
+
+    // Asignación directa en el post
+    if (post.responsableActualId && post.responsableActualId === currentUser.id) return true;
+
+    // Asignación por la ODT del post
+    const odt = odts.find(o => o.id === post.odtId);
+    if (!odt) return false;
+
+    if (isArte) {
+      return (
+        odt.disenadorId === currentUser.id ||
+        (odt.disenadorName && odt.disenadorName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      );
+    }
+
+    if (isVideo) {
+      return (
+        odt.editorAvId === currentUser.id ||
+        (odt.editorAvName && odt.editorAvName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      );
+    }
+
+    return (
+      odt.disenadorId === currentUser.id ||
+      odt.editorAvId === currentUser.id ||
+      (odt.disenadorName && odt.disenadorName.trim().toLowerCase() === currentUser.name.trim().toLowerCase()) ||
+      (odt.editorAvName && odt.editorAvName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+  };
+
+  // Posts de video que están actualmente en espera en el departamento de Arte (filtrado para el editor asignado)
   const videoWaitingInArte = useMemo(() => {
-    return posts.filter(p => p.estado === 'Diseño de Editables (Arte)' && p.tipoMaterial === 'Video');
-  }, [posts]);
+    return posts.filter(p => {
+      if (p.estado !== 'Diseño de Editables (Arte)' || p.tipoMaterial !== 'Video') return false;
+      if (selectedOdtFilter !== 'all' && p.odtId !== selectedOdtFilter) return false;
+      if (isSupervisorOrAdmin && viewScope === 'all') return true;
+      const odt = odts.find(o => o.id === p.odtId);
+      if (!odt) return false;
+      return (
+        odt.editorAvId === currentUser.id ||
+        (odt.editorAvName && odt.editorAvName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      );
+    });
+  }, [posts, odts, currentUser, isSupervisorOrAdmin, viewScope, selectedOdtFilter]);
 
-  // Filtrar posts asignados a esta área técnica y ordenar por urgencia (Nivel 1 primero)
+  // Filtrar posts asignados a esta área técnica y usuario específico
   const pendingPosts = useMemo(() => {
-    let list = posts;
+    let list = posts.filter(p => isPostAssignedToUser(p));
+
     if (isArte) {
       list = list.filter(p => p.estado === 'Producción Arte' || p.estado === 'Diseño de Editables (Arte)');
     } else if (isVideo) {
@@ -54,6 +129,10 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
       list = list.filter(p => p.nivelPrioridad === priorityFilter);
     }
 
+    if (selectedOdtFilter !== 'all') {
+      list = list.filter(p => p.odtId === selectedOdtFilter);
+    }
+
     // Ordenar: Nivel 1 primero, luego Nivel 2, luego Nivel 3, y por fecha límite
     return [...list].sort((a, b) => {
       const pMap: Record<string, number> = { 'Nivel 1': 1, 'Nivel 2': 2, 'Nivel 3': 3 };
@@ -64,11 +143,16 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
       const dateB = b.fechaEntregaMaterial || b.fechaPrevista || '';
       return dateA.localeCompare(dateB);
     });
-  }, [posts, isArte, isVideo, priorityFilter]);
+  }, [posts, isArte, isVideo, priorityFilter, selectedOdtFilter, odts, currentUser, isSupervisorOrAdmin, viewScope]);
 
   const deliveredPosts = useMemo(() => {
-    return posts.filter(p => p.enlaceMaterialFinal && p.estado !== 'Producción Arte' && p.estado !== 'Producción Audio/Video' && p.estado !== 'Diseño de Editables (Arte)');
-  }, [posts]);
+    return posts.filter(p => {
+      const isDelivered = Boolean(p.enlaceMaterialFinal && p.estado !== 'Producción Arte' && p.estado !== 'Producción Audio/Video' && p.estado !== 'Diseño de Editables (Arte)');
+      if (!isDelivered) return false;
+      if (selectedOdtFilter !== 'all' && p.odtId !== selectedOdtFilter) return false;
+      return isPostAssignedToUser(p);
+    });
+  }, [posts, isPostAssignedToUser, selectedOdtFilter]);
 
   const handleUrlChange = (postId: string, val: string) => {
     setUrlsMap(prev => ({ ...prev, [postId]: val }));
@@ -119,20 +203,89 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
             {isArte ? <Palette className="w-6 h-6" /> : <Video className="w-6 h-6" />}
           </div>
           <div>
-            <h2 className="text-lg font-bold">
-              {isArte ? 'Taller de Arte y Diseño Gráfico' : 'Estudio de Producción Audio y Video'}
-            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold">
+                {isArte ? 'Taller de Arte y Diseño Gráfico' : 'Estudio de Producción Audio y Video'}
+              </h2>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 border ${
+                isArte 
+                  ? 'bg-pink-800 text-pink-200 border-pink-700' 
+                  : 'bg-amber-800 text-amber-200 border-amber-700'
+              }`}>
+                <UserCheck className="w-3.5 h-3.5" />
+                {currentUser.name}
+              </span>
+            </div>
             <p className={`text-xs ${isArte ? 'text-pink-200' : 'text-amber-200'}`}>
-              Desarrollo de piezas visuales a partir de Copies aprobados por el cliente
+              {viewScope === 'assigned'
+                ? `Mostrando piezas de tus ${assignedOdts.length} parrilla(s) asignada(s)`
+                : 'Modo Supervisión: Mostrando todas las piezas técnicas del equipo'}
             </p>
           </div>
         </div>
 
-        <div className="px-4 py-2 bg-black/20 backdrop-blur-xs rounded-xl text-center">
-          <span className="text-xs text-white/80 block font-medium">Asignados Pendientes</span>
-          <span className="text-2xl font-black text-white">{pendingPosts.length}</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Selector de modo para Administrador / Supervisor */}
+          {isSupervisorOrAdmin && (
+            <div className="bg-black/30 p-1 rounded-xl flex items-center border border-white/20">
+              <button
+                onClick={() => setViewScope('assigned')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewScope === 'assigned'
+                    ? isArte ? 'bg-pink-600 text-white shadow-xs' : 'bg-amber-600 text-white shadow-xs'
+                    : 'text-white/70 hover:text-white'
+                }`}
+              >
+                Mis Asignadas ({assignedOdts.length})
+              </button>
+              <button
+                onClick={() => setViewScope('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                  viewScope === 'all'
+                    ? isArte ? 'bg-pink-600 text-white shadow-xs' : 'bg-amber-600 text-white shadow-xs'
+                    : 'text-white/70 hover:text-white'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Todas las Parrillas
+              </button>
+            </div>
+          )}
+
+          <div className="px-4 py-2 bg-black/20 backdrop-blur-xs rounded-xl text-center">
+            <span className="text-xs text-white/80 block font-medium">Asignados Pendientes</span>
+            <span className="text-2xl font-black text-white">{pendingPosts.length}</span>
+          </div>
         </div>
       </div>
+
+      {/* Barra de Filtro por Parrilla Asignada */}
+      {(assignedOdts.length > 1 || (isSupervisorOrAdmin && viewScope === 'all' && odts.length > 0)) && (
+        <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+          <Filter className={`w-4 h-4 shrink-0 ${isArte ? 'text-pink-600' : 'text-amber-600'}`} />
+          <span className="text-xs font-bold text-slate-700 shrink-0">Filtrar por Parrilla / ODT:</span>
+          <select
+            value={selectedOdtFilter}
+            onChange={(e) => setSelectedOdtFilter(e.target.value)}
+            className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-slate-800 font-medium focus:outline-hidden focus:ring-2 max-w-md"
+          >
+            <option value="all">Todas mis parrillas asignadas ({viewScope === 'assigned' ? assignedOdts.length : odts.length})</option>
+            {(viewScope === 'assigned' ? assignedOdts : odts).map(o => (
+              <option key={o.id} value={o.id}>
+                {o.numeroODT} - {o.clientName} ({o.nombreParrilla})
+              </option>
+            ))}
+          </select>
+          {selectedOdtFilter !== 'all' && (
+            <button
+              onClick={() => setSelectedOdtFilter('all')}
+              className={`text-xs hover:underline font-semibold ${isArte ? 'text-pink-600' : 'text-amber-600'}`}
+            >
+              Ver todas
+            </button>
+          )}
+        </div>
+      )}
 
       {/* AVISO OBLIGATORIO DE POLÍTICA DE ALMACENAMIENTO LIGERO (SECCIÓN 2 / 10) */}
       <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 flex items-start gap-3 text-xs text-sky-900">
@@ -313,18 +466,24 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
                     <span className="font-bold text-slate-700 uppercase tracking-wider block mb-1">
                       Copy In (Texto que DEBE ir en la gráfica/video):
                     </span>
-                    <p className="text-slate-900 font-semibold text-sm whitespace-pre-wrap">
-                      {post.copyIn || <span className="text-slate-400 italic">Sin texto en gráfica</span>}
-                    </p>
+                    <RichTextDisplay
+                      content={post.copyIn}
+                      fallbackText="Sin texto en gráfica"
+                      showCopyButton
+                      copyButtonLabel="Copiar Copy In"
+                    />
                   </div>
 
                   <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                     <span className="font-bold text-slate-500 uppercase tracking-wider block mb-1">
                       Copy Out (Caption de contexto):
                     </span>
-                    <p className="text-slate-700 whitespace-pre-wrap leading-relaxed line-clamp-3">
-                      {post.copyOut || 'Sin texto'}
-                    </p>
+                    <RichTextDisplay
+                      content={post.copyOut}
+                      fallbackText="Sin caption"
+                      showCopyButton
+                      copyButtonLabel="Copiar Caption"
+                    />
                   </div>
                 </div>
 

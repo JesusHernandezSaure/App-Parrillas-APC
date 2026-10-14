@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Post, ODT, Client, User } from '../types';
-import { Stethoscope, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Clock, Check } from 'lucide-react';
+import { Stethoscope, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Clock, Check, Filter, UserCheck, Eye } from 'lucide-react';
+import { RichTextDisplay } from './RichTextDisplay';
 
 interface MedicoViewProps {
   posts: Post[];
@@ -20,19 +21,78 @@ export const MedicoView: React.FC<MedicoViewProps> = ({
   onSelectPost
 }) => {
   const [tab, setTab] = useState<'pending' | 'approved' | 'returned'>('pending');
+  const [selectedOdtFilter, setSelectedOdtFilter] = useState<string>('all');
+
+  // Soporte para supervisores/administradores (permitir alternar entre asignadas y todas)
+  const isSupervisorOrAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'Admin' || Boolean(currentUser.permissions?.canSuperviseAll);
+  const [viewScope, setViewScope] = useState<'assigned' | 'all'>('assigned');
+
+  // Parrillas donde el usuario actual está explícitamente asignado como médico responsable
+  const assignedOdts = useMemo(() => {
+    return odts.filter(o => 
+      o.requiereMedico && (
+        o.medicoId === currentUser.id ||
+        (o.medicoName && o.medicoName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      )
+    );
+  }, [odts, currentUser]);
+
+  // Función de verificación de asignación estricta al médico
+  const isPostAssignedToUser = (post: Post) => {
+    if (isSupervisorOrAdmin && viewScope === 'all') return true;
+
+    // Asignación directa en el post
+    if (post.responsableActualId && post.responsableActualId === currentUser.id) return true;
+
+    // Asignación por la ODT del post
+    const odt = odts.find(o => o.id === post.odtId);
+    if (!odt) return false;
+
+    return (
+      odt.requiereMedico && (
+        odt.medicoId === currentUser.id ||
+        (odt.medicoName && odt.medicoName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      )
+    );
+  };
 
   // Posts asignados al médico: tanto de Copy como de Material
   const pendingPosts = useMemo(() => {
-    return posts.filter(p => p.estado === 'Revisión Médica' || p.estado === 'Revisión Médica Material');
-  }, [posts]);
+    return posts.filter(p => {
+      const isPendingStatus = p.estado === 'Revisión Médica' || p.estado === 'Revisión Médica Material';
+      if (!isPendingStatus) return false;
+      if (selectedOdtFilter !== 'all' && p.odtId !== selectedOdtFilter) return false;
+      return isPostAssignedToUser(p);
+    });
+  }, [posts, odts, currentUser, isSupervisorOrAdmin, viewScope, selectedOdtFilter]);
 
   const approvedPosts = useMemo(() => {
-    return posts.filter(p => p.aprobacionMedica?.status === 'Aprobado' || p.aprobacionMedicaMaterial?.status === 'Aprobado');
-  }, [posts]);
+    return posts.filter(p => {
+      const isApprovedStatus = p.aprobacionMedica?.status === 'Aprobado' || p.aprobacionMedicaMaterial?.status === 'Aprobado';
+      if (!isApprovedStatus) return false;
+      if (selectedOdtFilter !== 'all' && p.odtId !== selectedOdtFilter) return false;
+      if (isSupervisorOrAdmin && viewScope === 'all') return true;
+      return (
+        p.aprobacionMedica?.userId === currentUser.id ||
+        p.aprobacionMedicaMaterial?.userId === currentUser.id ||
+        isPostAssignedToUser(p)
+      );
+    });
+  }, [posts, odts, currentUser, isSupervisorOrAdmin, viewScope, selectedOdtFilter]);
 
   const returnedPosts = useMemo(() => {
-    return posts.filter(p => p.aprobacionMedica?.status === 'Cambios Solicitados' || p.aprobacionMedicaMaterial?.status === 'Cambios Solicitados');
-  }, [posts]);
+    return posts.filter(p => {
+      const isReturnedStatus = p.aprobacionMedica?.status === 'Cambios Solicitados' || p.aprobacionMedicaMaterial?.status === 'Cambios Solicitados';
+      if (!isReturnedStatus) return false;
+      if (selectedOdtFilter !== 'all' && p.odtId !== selectedOdtFilter) return false;
+      if (isSupervisorOrAdmin && viewScope === 'all') return true;
+      return (
+        p.aprobacionMedica?.userId === currentUser.id ||
+        p.aprobacionMedicaMaterial?.userId === currentUser.id ||
+        isPostAssignedToUser(p)
+      );
+    });
+  }, [posts, odts, currentUser, isSupervisorOrAdmin, viewScope, selectedOdtFilter]);
 
   return (
     <div className="space-y-6">
@@ -44,12 +104,49 @@ export const MedicoView: React.FC<MedicoViewProps> = ({
             <Stethoscope className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-lg font-bold">Panel de Validación Médica y Ética</h2>
-            <p className="text-xs text-blue-200">Compuerta obligatoria para marcas de salud y farmacéuticas</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold">Panel de Validación Médica y Ética</h2>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-800 text-blue-200 border border-blue-700 flex items-center gap-1">
+                <UserCheck className="w-3.5 h-3.5 text-blue-300" />
+                {currentUser.name}
+              </span>
+            </div>
+            <p className="text-xs text-blue-200">
+              {viewScope === 'assigned'
+                ? `Mostrando posts de tus ${assignedOdts.length} parrilla(s) médica(s) asignada(s)`
+                : 'Modo Supervisión: Mostrando todos los posts con validación médica'}
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Selector de modo para Administrador / Supervisor */}
+          {isSupervisorOrAdmin && (
+            <div className="bg-blue-950/80 p-1 rounded-xl flex items-center border border-blue-800">
+              <button
+                onClick={() => setViewScope('assigned')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewScope === 'assigned'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-blue-300 hover:text-white'
+                }`}
+              >
+                Mis Asignadas ({assignedOdts.length})
+              </button>
+              <button
+                onClick={() => setViewScope('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                  viewScope === 'all'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-blue-300 hover:text-white'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Todas las Parrillas
+              </button>
+            </div>
+          )}
+
           <div className="px-4 py-2 bg-blue-800/80 rounded-xl text-center">
             <span className="text-xs text-blue-200 block font-medium">Pendientes</span>
             <span className="text-xl font-black text-white">{pendingPosts.length}</span>
@@ -60,6 +157,34 @@ export const MedicoView: React.FC<MedicoViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Barra de Filtro por Parrilla Asignada */}
+      {(assignedOdts.length > 1 || (isSupervisorOrAdmin && viewScope === 'all' && odts.filter(o => o.requiereMedico).length > 0)) && (
+        <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+          <Filter className="w-4 h-4 text-blue-600 shrink-0" />
+          <span className="text-xs font-bold text-slate-700 shrink-0">Filtrar por Parrilla / ODT:</span>
+          <select
+            value={selectedOdtFilter}
+            onChange={(e) => setSelectedOdtFilter(e.target.value)}
+            className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500 max-w-md"
+          >
+            <option value="all">Todas mis parrillas asignadas ({viewScope === 'assigned' ? assignedOdts.length : odts.filter(o => o.requiereMedico).length})</option>
+            {(viewScope === 'assigned' ? assignedOdts : odts.filter(o => o.requiereMedico)).map(o => (
+              <option key={o.id} value={o.id}>
+                {o.numeroODT} - {o.clientName} ({o.nombreParrilla})
+              </option>
+            ))}
+          </select>
+          {selectedOdtFilter !== 'all' && (
+            <button
+              onClick={() => setSelectedOdtFilter('all')}
+              className="text-xs text-blue-600 hover:underline font-semibold"
+            >
+              Ver todas
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Selector de Bandejas */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
@@ -154,14 +279,14 @@ export const MedicoView: React.FC<MedicoViewProps> = ({
                       <span className="font-bold text-slate-500 uppercase tracking-wider block mb-1">
                         Copy In (Texto en gráfica)
                       </span>
-                      <p className="text-slate-900 font-medium whitespace-pre-wrap">{post.copyIn || 'Sin texto'}</p>
+                      <RichTextDisplay content={post.copyIn} fallbackText="Sin texto en gráfica" showCopyButton copyButtonLabel="Copiar" />
                     </div>
 
                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                       <span className="font-bold text-slate-500 uppercase tracking-wider block mb-1">
                         Copy Out (Texto del post)
                       </span>
-                      <p className="text-slate-800 whitespace-pre-wrap leading-relaxed">{post.copyOut || 'Sin texto'}</p>
+                      <RichTextDisplay content={post.copyOut} fallbackText="Sin texto de caption" showCopyButton copyButtonLabel="Copiar" />
                     </div>
                   </div>
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Post, ODT, MaterialType, PostDimensions, PriorityLevel, User } from '../types';
 import { Sparkles, X, Plus, ExternalLink, Send, Calendar, Clock, Layers, AlertCircle, Palette } from 'lucide-react';
+import { RichTextEditor } from './RichTextEditor';
 
 interface CreatePostModalProps {
   odt: ODT;
@@ -431,27 +432,25 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
 
           <div>
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
-              Copy In (Texto que irá dentro de la imagen / diseño)
+              Copy In (Texto enriquecido sobre la imagen / gráfica)
             </label>
-            <textarea
-              rows={3}
-              placeholder="Titular, bullet points, llamados a la acción sobre la gráfica..."
-              className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+            <RichTextEditor
               value={copyIn}
-              onChange={(e) => setCopyIn(e.target.value)}
+              onChange={setCopyIn}
+              placeholder="Titular, bullet points, llamados a la acción sobre la gráfica..."
+              minHeight="85px"
             />
           </div>
 
           <div>
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
-              Copy Out (Texto del Post / Caption / Hashtags)
+              Copy Out (Texto enriquecido del Post / Caption / Hashtags)
             </label>
-            <textarea
-              rows={4}
-              placeholder="Texto completo que acompañará la publicación en redes sociales..."
-              className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+            <RichTextEditor
               value={copyOut}
-              onChange={(e) => setCopyOut(e.target.value)}
+              onChange={setCopyOut}
+              placeholder="Texto completo que acompañará la publicación en redes sociales..."
+              minHeight="120px"
             />
           </div>
 

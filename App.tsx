@@ -21,7 +21,7 @@ import { CreatePostModal } from './components/CreatePostModal';
 import { InterventionModal } from './components/InterventionModal';
 import { PostDetailModal } from './components/PostDetailModal';
 import { Crown, ArrowLeft } from 'lucide-react';
-import { dbSave, dbDelete, dbSeedIfEmpty, dbListen } from './services/firebase';
+import { dbSave, dbDelete, dbListen } from './services/firebase';
 
 export const App: React.FC = () => {
   // Inicialización de datos locales y conexión con Firebase Firestore
@@ -36,12 +36,7 @@ export const App: React.FC = () => {
 
     const initFirebaseSync = async () => {
       try {
-        // Hydrate or seed default items if empty in Firebase
-        await dbSeedIfEmpty('users', getStoredUsers());
-        await dbSeedIfEmpty('clients', getStoredClients());
-        await dbSeedIfEmpty('odts', getStoredOdts());
-        await dbSeedIfEmpty('posts', getStoredPosts());
-
+        // Real-time synchronization directly with production database without automatic seeding
         if (!isSubscribed) return;
 
         // Establish real-time live synchronization listeners
@@ -399,52 +394,64 @@ export const App: React.FC = () => {
       nextStatus = odt?.requiereMedico ? 'Revisión Médica' : 'Corrección de Copy';
       nextArea = odt?.requiereMedico ? 'Médico' : 'Corrección';
       nextRespName = odt?.requiereMedico ? (odt.medicoName || 'Médico') : (odt?.correctorName || 'Corrector');
+      nextRespId = odt?.requiereMedico ? (odt.medicoId || '') : (odt?.correctorId || '');
     } else if (post.estado === 'Revisión Médica') {
       nextStatus = 'Corrección de Copy';
       nextArea = 'Corrección';
       nextRespName = odt?.correctorName || 'Corrector';
+      nextRespId = odt?.correctorId || '';
     } else if (post.estado === 'Corrección de Copy' || post.estado === 'Ajustes de Copy') {
       nextStatus = 'Aprobación Copy Cliente';
       nextArea = 'Cliente';
       nextRespName = 'Cliente';
+      nextRespId = '';
     } else if (post.estado === 'Aprobación Copy Cliente') {
       if (isAudioVisual(post.tipoMaterial) && post.requiereArtePrevio) {
         nextStatus = 'Diseño de Editables (Arte)';
         nextArea = 'Arte';
         nextRespName = odt?.disenadorName || 'Diseñador';
+        nextRespId = odt?.disenadorId || '';
       } else if (isAudioVisual(post.tipoMaterial)) {
         nextStatus = 'Producción Audio/Video';
         nextArea = 'Audio y Video';
         nextRespName = odt?.editorAvName || 'Editor AV';
+        nextRespId = odt?.editorAvId || '';
       } else {
         nextStatus = 'Producción Arte';
         nextArea = 'Arte';
         nextRespName = odt?.disenadorName || 'Diseñador';
+        nextRespId = odt?.disenadorId || '';
       }
     } else if (post.estado === 'Diseño de Editables (Arte)') {
       nextStatus = 'Producción Audio/Video';
       nextArea = 'Audio y Video';
       nextRespName = odt?.editorAvName || 'Editor AV';
+      nextRespId = odt?.editorAvId || '';
     } else if (post.estado === 'Producción Arte' || post.estado === 'Producción Audio/Video') {
       nextStatus = 'Corrección Material';
       nextArea = 'Corrección';
       nextRespName = odt?.correctorName || 'Corrector';
+      nextRespId = odt?.correctorId || '';
     } else if (post.estado === 'Corrección Material') {
       nextStatus = post.requiereRevisionMedicaMaterial ? 'Revisión Médica Material' : 'Aprobación Interna Final';
       nextArea = post.requiereRevisionMedicaMaterial ? 'Médico' : 'Ejecutivo';
       nextRespName = post.requiereRevisionMedicaMaterial ? (odt?.medicoName || 'Médico') : (odt?.ejecutivoName || 'Ejecutivo');
+      nextRespId = post.requiereRevisionMedicaMaterial ? (odt?.medicoId || '') : (odt?.ejecutivoId || '');
     } else if (post.estado === 'Revisión Médica Material') {
       nextStatus = 'Aprobación Interna Final';
       nextArea = 'Ejecutivo';
       nextRespName = odt?.ejecutivoName || 'Ejecutivo';
+      nextRespId = odt?.ejecutivoId || '';
     } else if (post.estado === 'Aprobación Interna Final') {
       nextStatus = 'Aprobación Material Cliente';
       nextArea = 'Cliente';
       nextRespName = 'Cliente';
+      nextRespId = '';
     } else if (post.estado === 'Aprobación Material Cliente' || post.estado === 'Cambios solicitados por Cliente') {
       nextStatus = 'Listo para Publicar';
       nextArea = 'Community';
       nextRespName = odt?.communityName || 'Community';
+      nextRespId = odt?.communityId || '';
     }
 
     const intervention = createIntervention(

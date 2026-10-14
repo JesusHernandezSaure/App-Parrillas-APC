@@ -10,6 +10,7 @@ import {
   OdtPipelineFunnel, PostStageMap, MACRO_STAGES, getMacroStageForStatus, 
   getDaysInCurrentStage, getPostPacing 
 } from './PostPipelineTracker';
+import { RichTextDisplay, stripHtml } from './RichTextDisplay';
 
 interface EjecutivoViewProps {
   clients: Client[];
@@ -64,11 +65,17 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
 
   const isOdtCreator = canCreateOdt !== false && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin');
 
-  // Clientes asignados a este ejecutivo (o todos si es Admin o Community)
+  // Clientes asignados a este ejecutivo (o todos si es Admin o Super Admin)
   const myClients = useMemo(() => {
-    if (currentUser.role === 'Admin' || currentUser.role === 'Community') return clients;
-    return clients.filter(c => c.ejecutivoId === currentUser.id);
-  }, [clients, currentUser]);
+    if (currentUser.role === 'Admin' || currentUser.role === 'Super Admin') return clients;
+    return clients.filter(c => 
+      c.ejecutivoId === currentUser.id ||
+      odts.some(o => o.clientId === c.id && (
+        o.ejecutivoId === currentUser.id ||
+        (o.ejecutivoName && o.ejecutivoName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+      ))
+    );
+  }, [clients, currentUser, odts]);
 
   const activeClient = useMemo(() => {
     if (!selectedClientId) return null;
@@ -77,9 +84,17 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
 
   // ODTs del cliente seleccionado (o de todos si no hay seleccionado)
   const clientOdts = useMemo(() => {
-    if (!selectedClientId) return odts.filter(o => myClients.some(c => c.id === o.clientId));
-    return odts.filter(o => o.clientId === selectedClientId);
-  }, [odts, selectedClientId, myClients]);
+    let list = odts;
+    if (currentUser.role === 'Ejecutivo') {
+      list = list.filter(o => 
+        o.ejecutivoId === currentUser.id || 
+        (o.ejecutivoName && o.ejecutivoName.trim().toLowerCase() === currentUser.name.trim().toLowerCase()) ||
+        myClients.some(c => c.id === o.clientId && c.ejecutivoId === currentUser.id)
+      );
+    }
+    if (!selectedClientId) return list.filter(o => myClients.some(c => c.id === o.clientId));
+    return list.filter(o => o.clientId === selectedClientId);
+  }, [odts, selectedClientId, myClients, currentUser]);
 
   const activeOdt = useMemo(() => {
     if (!selectedOdtId) return null;
@@ -161,10 +176,10 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       list = list.filter(p => 
-        p.numeroInterno.toLowerCase().includes(q) ||
-        p.copyOut.toLowerCase().includes(q) ||
-        p.copyIn.toLowerCase().includes(q) ||
-        p.redSocial.toLowerCase().includes(q)
+        (p.numeroInterno || '').toLowerCase().includes(q) ||
+        stripHtml(p.copyOut || '').toLowerCase().includes(q) ||
+        stripHtml(p.copyIn || '').toLowerCase().includes(q) ||
+        (p.redSocial || '').toLowerCase().includes(q)
       );
     }
 
@@ -954,9 +969,9 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
 
                       {/* Textos Preview y Responsable */}
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-700 truncate max-w-3xl">
+                        <div className="text-xs text-slate-700 max-w-3xl">
                           <span className="font-bold text-slate-900 mr-1">Copy In:</span>
-                          {post.copyIn ? <span className="italic">"{post.copyIn}"</span> : <span className="text-slate-400">Sin copy in</span>}
+                          <RichTextDisplay content={post.copyIn} fallbackText="Sin copy in" className="inline-block" />
                         </div>
 
                         <div className="text-xs text-slate-500 flex items-center gap-3 flex-wrap">

@@ -3,6 +3,7 @@ import { Post, ODT, User } from '../types';
 import { 
   CheckCircle2, AlertTriangle, ExternalLink, X, MessageSquare, ShieldCheck, ArrowRight
 } from 'lucide-react';
+import { RichTextDisplay } from './RichTextDisplay';
 
 interface ApprovalModalProps {
   post: Post;
@@ -130,18 +131,24 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
                 Copy In (Texto en Imagen / Gráfica)
               </span>
-              <p className="text-sm font-medium text-slate-900 whitespace-pre-wrap">
-                {post.copyIn || <span className="text-slate-400 italic">Sin texto en gráfica</span>}
-              </p>
+              <RichTextDisplay
+                content={post.copyIn}
+                fallbackText="Sin texto en gráfica"
+                showCopyButton
+                copyButtonLabel="Copiar"
+              />
             </div>
 
             <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
                 Copy Out (Texto de Publicación / Caption)
               </span>
-              <p className="text-sm font-normal text-slate-800 whitespace-pre-wrap leading-relaxed">
-                {post.copyOut || <span className="text-slate-400 italic">Sin caption</span>}
-              </p>
+              <RichTextDisplay
+                content={post.copyOut}
+                fallbackText="Sin caption"
+                showCopyButton
+                copyButtonLabel="Copiar"
+              />
             </div>
           </div>
 

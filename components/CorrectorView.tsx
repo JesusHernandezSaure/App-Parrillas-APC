@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Post, ODT, Client, User } from '../types';
-import { CheckSquare, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Clock, Layers, Sparkles } from 'lucide-react';
+import { CheckSquare, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Clock, Layers, Sparkles, Filter, UserCheck, Eye } from 'lucide-react';
+import { RichTextDisplay } from './RichTextDisplay';
 
 interface CorrectorViewProps {
   posts: Post[];
@@ -20,21 +21,70 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
   onSelectPost
 }) => {
   const [subQueue, setSubQueue] = useState<'copy' | 'material' | 'history'>('copy');
+  const [selectedOdtFilter, setSelectedOdtFilter] = useState<string>('all');
+  
+  // Soporte para supervisores/administradores (permitir alternar entre asignadas y todas)
+  const isSupervisorOrAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'Admin' || Boolean(currentUser.permissions?.canSuperviseAll);
+  const [viewScope, setViewScope] = useState<'assigned' | 'all'>('assigned');
+
+  // Parrillas donde el usuario actual está explícitamente asignado como corrector
+  const assignedOdts = useMemo(() => {
+    return odts.filter(o => 
+      o.correctorId === currentUser.id ||
+      (o.correctorName && o.correctorName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+  }, [odts, currentUser]);
+
+  // Función de verificación de asignación estricta
+  const isPostAssignedToUser = (post: Post) => {
+    // Si el usuario es supervisor/admin y eligió ver todo el equipo
+    if (isSupervisorOrAdmin && viewScope === 'all') return true;
+
+    // Asignación directa en el post
+    if (post.responsableActualId && post.responsableActualId === currentUser.id) return true;
+
+    // Asignación por la ODT del post
+    const odt = odts.find(o => o.id === post.odtId);
+    if (!odt) return false;
+
+    return (
+      odt.correctorId === currentUser.id ||
+      (odt.correctorName && odt.correctorName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+  };
 
   // Cola 1: Corrección de Copy
   const pendingCopyPosts = useMemo(() => {
-    return posts.filter(p => p.estado === 'Corrección de Copy');
-  }, [posts]);
+    return posts.filter(p => {
+      if (p.estado !== 'Corrección de Copy') return false;
+      if (selectedOdtFilter !== 'all' && p.odtId !== selectedOdtFilter) return false;
+      return isPostAssignedToUser(p);
+    });
+  }, [posts, odts, currentUser, isSupervisorOrAdmin, viewScope, selectedOdtFilter]);
 
   // Cola 2: Corrección de Material (Arte / Video producido)
   const pendingMaterialPosts = useMemo(() => {
-    return posts.filter(p => p.estado === 'Corrección Material');
-  }, [posts]);
+    return posts.filter(p => {
+      if (p.estado !== 'Corrección Material') return false;
+      if (selectedOdtFilter !== 'all' && p.odtId !== selectedOdtFilter) return false;
+      return isPostAssignedToUser(p);
+    });
+  }, [posts, odts, currentUser, isSupervisorOrAdmin, viewScope, selectedOdtFilter]);
 
   // Historial aprobado/devuelto
   const historicalPosts = useMemo(() => {
-    return posts.filter(p => p.aprobacionCorreccionCopy || p.aprobacionCorreccionMaterial);
-  }, [posts]);
+    return posts.filter(p => {
+      const hasReviewed = Boolean(p.aprobacionCorreccionCopy || p.aprobacionCorreccionMaterial);
+      if (!hasReviewed) return false;
+      if (selectedOdtFilter !== 'all' && p.odtId !== selectedOdtFilter) return false;
+      if (isSupervisorOrAdmin && viewScope === 'all') return true;
+      return (
+        p.aprobacionCorreccionCopy?.userId === currentUser.id ||
+        p.aprobacionCorreccionMaterial?.userId === currentUser.id ||
+        isPostAssignedToUser(p)
+      );
+    });
+  }, [posts, odts, currentUser, isSupervisorOrAdmin, viewScope, selectedOdtFilter]);
 
   return (
     <div className="space-y-6">
@@ -46,12 +96,49 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
             <CheckSquare className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-lg font-bold">Garantía de Calidad (QA & Corrección de Estilo)</h2>
-            <p className="text-xs text-purple-200">Revisión ortográfica, sintáctica y verificación de piezas producidas</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold">Garantía de Calidad (QA & Corrección de Estilo)</h2>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-800 text-purple-200 border border-purple-700 flex items-center gap-1">
+                <UserCheck className="w-3.5 h-3.5 text-purple-300" />
+                {currentUser.name}
+              </span>
+            </div>
+            <p className="text-xs text-purple-200">
+              {viewScope === 'assigned'
+                ? `Mostrando únicamente posts de tus ${assignedOdts.length} parrilla(s) asignada(s)`
+                : 'Modo Supervisión: Mostrando todos los posts del equipo'}
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Selector de modo para Administrador / Supervisor */}
+          {isSupervisorOrAdmin && (
+            <div className="bg-purple-950/80 p-1 rounded-xl flex items-center border border-purple-800">
+              <button
+                onClick={() => setViewScope('assigned')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewScope === 'assigned'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-purple-300 hover:text-white'
+                }`}
+              >
+                Mis Asignadas ({assignedOdts.length})
+              </button>
+              <button
+                onClick={() => setViewScope('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                  viewScope === 'all'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-purple-300 hover:text-white'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Todas las Parrillas
+              </button>
+            </div>
+          )}
+
           <div className="px-4 py-2 bg-purple-800/80 rounded-xl text-center">
             <span className="text-xs text-purple-200 block font-medium">Copies Pendientes</span>
             <span className="text-xl font-black text-white">{pendingCopyPosts.length}</span>
@@ -62,6 +149,34 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Barra de Filtro por Parrilla Asignada */}
+      {(assignedOdts.length > 1 || (isSupervisorOrAdmin && viewScope === 'all' && odts.length > 0)) && (
+        <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+          <Filter className="w-4 h-4 text-purple-600 shrink-0" />
+          <span className="text-xs font-bold text-slate-700 shrink-0">Filtrar por Parrilla / ODT:</span>
+          <select
+            value={selectedOdtFilter}
+            onChange={(e) => setSelectedOdtFilter(e.target.value)}
+            className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-purple-500 max-w-md"
+          >
+            <option value="all">Todas mis parrillas asignadas ({viewScope === 'assigned' ? assignedOdts.length : odts.length})</option>
+            {(viewScope === 'assigned' ? assignedOdts : odts).map(o => (
+              <option key={o.id} value={o.id}>
+                {o.numeroODT} - {o.clientName} ({o.nombreParrilla})
+              </option>
+            ))}
+          </select>
+          {selectedOdtFilter !== 'all' && (
+            <button
+              onClick={() => setSelectedOdtFilter('all')}
+              className="text-xs text-purple-600 hover:underline font-semibold"
+            >
+              Ver todas
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Selector de Sub-colas */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
@@ -164,14 +279,14 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
                       <span className="font-bold text-slate-500 uppercase tracking-wider block mb-1">
                         Copy In (Texto en gráfica)
                       </span>
-                      <p className="text-slate-900 font-medium whitespace-pre-wrap">{post.copyIn || 'Sin texto'}</p>
+                      <RichTextDisplay content={post.copyIn} fallbackText="Sin texto en gráfica" showCopyButton copyButtonLabel="Copiar" />
                     </div>
 
                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                       <span className="font-bold text-slate-500 uppercase tracking-wider block mb-1">
                         Copy Out (Texto del post / Caption)
                       </span>
-                      <p className="text-slate-800 whitespace-pre-wrap leading-relaxed">{post.copyOut || 'Sin texto'}</p>
+                      <RichTextDisplay content={post.copyOut} fallbackText="Sin texto de caption" showCopyButton copyButtonLabel="Copiar" />
                     </div>
                   </div>
 
@@ -283,13 +398,13 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
                       <span className="font-bold text-slate-500 uppercase tracking-wider block mb-1">
                         Copy In Aprobado:
                       </span>
-                      <p className="text-slate-900 font-medium">{post.copyIn || 'Sin texto'}</p>
+                      <RichTextDisplay content={post.copyIn} fallbackText="Sin texto" showCopyButton copyButtonLabel="Copiar" />
                     </div>
                     <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
                       <span className="font-bold text-slate-500 uppercase tracking-wider block mb-1">
                         Copy Out Aprobado:
                       </span>
-                      <p className="text-slate-800">{post.copyOut || 'Sin texto'}</p>
+                      <RichTextDisplay content={post.copyOut} fallbackText="Sin texto" showCopyButton copyButtonLabel="Copiar" />
                     </div>
                   </div>
                 </div>
