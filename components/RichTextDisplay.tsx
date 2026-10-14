@@ -18,6 +18,23 @@ export function isHtmlContent(str?: string): boolean {
 }
 
 /**
+ * Normalizes content (plain text with \n or formatted HTML) so that
+ * the contentEditable editor preserves all line breaks, paragraphs and whitespace.
+ */
+export function normalizeValueForEditor(val?: string): string {
+  if (!val) return '';
+  if (!isHtmlContent(val)) {
+    // Legacy/plain text: convert newlines into <br> so the browser DOM parser
+    // treats them as explicit line breaks instead of collapsing them into a single space
+    return val
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .replace(/\n/g, '<br>');
+  }
+  return val;
+}
+
+/**
  * Strips HTML tags returning plain text
  */
 export function stripHtml(html?: string): string {
@@ -27,6 +44,8 @@ export function stripHtml(html?: string): string {
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<br\s*[\/]?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n')
     .replace(/<\/li>/gi, '\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
@@ -35,7 +54,9 @@ export function stripHtml(html?: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/\n\s*\n/g, '\n\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
@@ -134,7 +155,7 @@ export const RichTextDisplay: React.FC<RichTextDisplayProps> = ({
 
       {hasHtml ? (
         <div
-          className="rich-text-rendered font-normal leading-relaxed text-slate-800 break-words
+          className="rich-text-rendered font-normal leading-relaxed text-slate-800 break-words whitespace-pre-wrap
             [&_b]:font-bold [&_b]:text-slate-900
             [&_strong]:font-bold [&_strong]:text-slate-900
             [&_i]:italic [&_em]:italic
@@ -146,7 +167,8 @@ export const RichTextDisplay: React.FC<RichTextDisplayProps> = ({
             [&_h1]:text-base [&_h1]:font-bold [&_h1]:text-slate-900 [&_h1]:my-1.5
             [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:my-1
             [&_h3]:text-xs [&_h3]:font-bold [&_h3]:text-slate-900 [&_h3]:my-1
-            [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0"
+            [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0
+            [&_p]:min-h-[1.25em] [&_div]:min-h-[1.25em]"
           dangerouslySetInnerHTML={{ __html: content }}
         />
       ) : (

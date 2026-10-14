@@ -14,7 +14,7 @@ import {
   Hash,
   Sparkles
 } from 'lucide-react';
-import { stripHtml, convertToUnicodeSocial } from './RichTextDisplay';
+import { stripHtml, convertToUnicodeSocial, normalizeValueForEditor, isHtmlContent } from './RichTextDisplay';
 
 interface RichTextEditorProps {
   value: string;
@@ -58,13 +58,16 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const [copiedType, setCopiedType] = useState<'clean' | 'unicode' | null>(null);
 
   // Sync internal innerHTML when value prop changes externally (e.g. initial load or reset)
+  // Preserves multi-line formatting from legacy plain text or rich HTML
   useEffect(() => {
     if (!editorRef.current) return;
-    const currentHTML = editorRef.current.innerHTML;
-    // Normalize empty strings
-    const normalizedValue = value || '';
-    if (currentHTML !== normalizedValue && document.activeElement !== editorRef.current) {
-      editorRef.current.innerHTML = normalizedValue;
+    const targetHtml = normalizeValueForEditor(value);
+    
+    // Don't overwrite if user is actively typing in the editor
+    if (document.activeElement === editorRef.current) return;
+
+    if (editorRef.current.innerHTML !== targetHtml) {
+      editorRef.current.innerHTML = targetHtml;
     }
   }, [value]);
 
@@ -140,7 +143,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     const text = e.clipboardData.getData('text/plain');
     const html = e.clipboardData.getData('text/html');
 
-    if (html) {
+    if (html && isHtmlContent(html)) {
       // Parse and clean basic HTML
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
@@ -152,8 +155,11 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       const cleanHtml = doc.body.innerHTML;
       document.execCommand('insertHTML', false, cleanHtml);
     } else {
-      // Plain text: preserve line breaks
-      const formatted = text.replace(/\n/g, '<br>');
+      // Plain text: preserve line breaks as <br>
+      const formatted = text
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/\n/g, '<br>');
       document.execCommand('insertHTML', false, formatted);
     }
     handleInput();
@@ -386,7 +392,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           onMouseUp={updateActiveFormats}
           onPaste={handlePaste}
           style={{ minHeight }}
-          className="rich-text-editor-content p-3 text-xs text-slate-800 leading-relaxed outline-hidden overflow-y-auto max-h-96
+          className="rich-text-editor-content p-3 text-xs text-slate-800 leading-relaxed outline-hidden overflow-y-auto max-h-96 whitespace-pre-wrap break-words
             [&_b]:font-bold [&_b]:text-slate-900
             [&_strong]:font-bold [&_strong]:text-slate-900
             [&_i]:italic [&_em]:italic
@@ -398,7 +404,8 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
             [&_h1]:text-base [&_h1]:font-bold [&_h1]:text-slate-900 [&_h1]:my-1.5
             [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:my-1
             [&_h3]:text-xs [&_h3]:font-bold [&_h3]:text-slate-900 [&_h3]:my-1
-            [&_p]:my-1"
+            [&_p]:my-1 [&_p]:min-h-[1.25em]
+            [&_div]:min-h-[1.25em]"
         />
 
         {/* Placeholder flotante cuando está vacío */}
