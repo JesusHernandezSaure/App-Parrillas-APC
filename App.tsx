@@ -1384,25 +1384,32 @@ export const App: React.FC = () => {
   // Render login screen if user is not logged in
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-slate-900 bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans antialiased">
-        <div className="sm:mx-auto sm:w-full sm:max-w-md">
-          {/* Logo */}
-          <div className="mx-auto h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black text-2xl tracking-wider shadow-xl border border-amber-300">
+      <div className="min-h-screen bg-slate-950 bg-gradient-to-br from-emerald-950 via-slate-950 to-pink-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans antialiased relative overflow-hidden">
+        {/* Luces ambientales en Verde y Rosa */}
+        <div className="absolute top-10 left-1/4 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-10 right-1/4 w-80 h-80 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
+          {/* Logo en Verde y Rosa */}
+          <div className="mx-auto h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-400 via-teal-500 to-pink-500 flex items-center justify-center text-white font-black text-2xl tracking-wider shadow-xl shadow-emerald-500/25 border border-pink-300/40 transform hover:scale-105 transition-transform">
             APC
           </div>
-          <h2 className="mt-6 text-center text-3xl font-black tracking-tight text-white">
-            Parrillas APC Publicidad
+          <h2 className="mt-5 text-center text-3xl font-black tracking-tight text-white">
+            APC Digital Hub
           </h2>
-          <p className="mt-2 text-center text-xs text-slate-400 max-w-sm mx-auto uppercase tracking-widest font-semibold">
-            Flujo Operativo de Contenidos • ISO 9001
+          <p className="mt-2 text-center text-xs text-pink-300/90 max-w-sm mx-auto uppercase tracking-widest font-bold">
+            Aprobación de contenidos digitales
           </p>
         </div>
 
-        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
-          <div style={{ backgroundColor: '#1e293b' }} className="bg-slate-800 py-8 px-6 shadow-2xl rounded-3xl border border-slate-700/80">
+        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 relative z-10">
+          <div className="bg-slate-900/90 backdrop-blur-xl py-8 px-6 sm:px-8 shadow-2xl rounded-3xl border border-emerald-500/20 shadow-emerald-950/40 relative">
+            {/* Acento superior Verde y Rosa */}
+            <div className="absolute top-0 inset-x-8 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-pink-500 rounded-full" />
+
             <form className="space-y-6" onSubmit={handleLoginSubmit}>
               <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-bold text-emerald-300 uppercase tracking-wider mb-2">
                   Nombre de Usuario (Login)
                 </label>
                 <input
@@ -1414,12 +1421,12 @@ export const App: React.FC = () => {
                     setLoginError('');
                   }}
                   placeholder="Ej. superadmin, ana.ejecutiva"
-                  className="w-full text-sm px-4 py-3 border border-slate-700 rounded-xl bg-slate-950 text-white placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                  className="w-full text-sm px-4 py-3 border border-slate-700/80 rounded-xl bg-slate-950/80 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-400 focus:border-pink-500 transition-all focus:outline-hidden"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-bold text-emerald-300 uppercase tracking-wider mb-2">
                   Contraseña
                 </label>
                 <input
@@ -1431,7 +1438,7 @@ export const App: React.FC = () => {
                     setLoginError('');
                   }}
                   placeholder="••••••••"
-                  className="w-full text-sm px-4 py-3 border border-slate-700 rounded-xl bg-slate-950 text-white placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                  className="w-full text-sm px-4 py-3 border border-slate-700/80 rounded-xl bg-slate-950/80 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-400 focus:border-pink-500 transition-all focus:outline-hidden"
                 />
               </div>
 
@@ -1444,58 +1451,17 @@ export const App: React.FC = () => {
               <div>
                 <button
                   type="submit"
-                  className="w-full py-3.5 px-4 border border-transparent rounded-xl shadow-lg text-sm font-black text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-all cursor-pointer transform hover:scale-[1.02] active:scale-[0.98]"
+                  className="w-full py-3.5 px-4 border border-transparent rounded-xl shadow-lg shadow-emerald-500/25 text-sm font-black text-white bg-gradient-to-r from-emerald-500 via-teal-500 to-pink-500 hover:from-emerald-400 hover:via-teal-400 hover:to-pink-400 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-all cursor-pointer transform hover:scale-[1.02] active:scale-[0.98]"
                 >
                   Iniciar Sesión
                 </button>
               </div>
             </form>
 
-            {/* Ayuda con usuarios reales registrados */}
-            <div className="mt-8 pt-6 border-t border-slate-700/60 text-xs">
-              <details className="group cursor-pointer">
-                <summary className="flex justify-between items-center text-slate-400 font-bold hover:text-white select-none list-none">
-                  <span>🔑 Ver Cuentas y Accesos Registrados</span>
-                  <span className="transition group-open:rotate-180 text-amber-400">▼</span>
-                </summary>
-                <div style={{ backgroundColor: '#0f172a' }} className="mt-4 p-3 bg-slate-950 rounded-xl space-y-2 text-[11px] text-slate-300 border border-slate-800">
-                  <p className="font-semibold text-amber-400 border-b border-slate-800 pb-1">Perfiles activos en la plataforma:</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                    <div>
-                      <strong className="text-white block">Super Admin (Dirección):</strong>
-                      <span>jesus.apc / admin</span>
-                    </div>
-                    <div>
-                      <strong className="text-white block">Super Admin (Dirección Gral):</strong>
-                      <span>catina.apc / 1234</span>
-                    </div>
-                    <div>
-                      <strong className="text-white block">Ejecutivo de Cuentas:</strong>
-                      <span>brenda.sosa / 123</span>
-                    </div>
-                    <div>
-                      <strong className="text-white block">Médico (Medical Writer):</strong>
-                      <span>nadia.apc / 123</span>
-                    </div>
-                    <div>
-                      <strong className="text-white block">Community Manager:</strong>
-                      <span>bere.apc / 123 (o ricardo.apc / 123)</span>
-                    </div>
-                    <div>
-                      <strong className="text-white block">Arte / Diseño:</strong>
-                      <span>ania.jaime / 123</span>
-                    </div>
-                    <div>
-                      <strong className="text-white block">Corrección / Calidad:</strong>
-                      <span>paty.apc / 123 (o sughey.apc / 123)</span>
-                    </div>
-                    <div>
-                      <strong className="text-white block">Audio y Video:</strong>
-                      <span>audioyvideo.apc / 123</span>
-                    </div>
-                  </div>
-                </div>
-              </details>
+            <div className="mt-6 pt-5 border-t border-slate-800 text-center">
+              <p className="text-[11px] text-slate-400 font-medium">
+                APC Digital Hub • Aprobación de contenidos digitales
+              </p>
             </div>
           </div>
         </div>
@@ -1559,16 +1525,15 @@ export const App: React.FC = () => {
         {/* Banner de simulación activa (EXCLUSIVO PARA SUPER ADMIN) */}
         {isSuperAdmin && isSimulating && (
           <div 
-            style={{ backgroundColor: '#f59e0b' }}
-            className="mb-6 bg-amber-500 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 p-3.5 rounded-2xl font-bold text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md border border-amber-400"
+            className="mb-6 bg-gradient-to-r from-emerald-600 via-teal-600 to-pink-600 text-white p-3.5 rounded-2xl font-bold text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md border border-pink-400/30"
           >
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-slate-950 text-amber-400 flex items-center justify-center shrink-0">
-                <Crown className="w-4 h-4 fill-amber-400" />
+              <div className="w-7 h-7 rounded-lg bg-slate-950/40 text-pink-200 border border-pink-300/30 flex items-center justify-center shrink-0">
+                <Crown className="w-4 h-4 fill-pink-300" />
               </div>
               <div>
-                <span className="font-extrabold uppercase tracking-wide text-[11px] block">Modo Simulación de Perfil (Solo Super Admin)</span>
-                <span className="font-medium text-slate-900 text-xs">
+                <span className="font-extrabold uppercase tracking-wide text-[11px] block text-emerald-100">Modo Simulación de Perfil (Solo Super Admin)</span>
+                <span className="font-medium text-white text-xs">
                   {superAdminRoleView ? (
                     <>Viendo la interfaz operativa de: <strong>{superAdminRoleView}</strong>.</>
                   ) : (
@@ -1580,7 +1545,7 @@ export const App: React.FC = () => {
             </div>
             <button
               onClick={handleExitSimulation}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-950 text-white font-extrabold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer text-xs shrink-0 self-start sm:self-auto shadow-sm"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-950 text-white font-extrabold rounded-xl hover:bg-slate-900 transition-colors cursor-pointer text-xs shrink-0 self-start sm:self-auto shadow-sm border border-slate-700"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Volver a Consola Super Admin</span>

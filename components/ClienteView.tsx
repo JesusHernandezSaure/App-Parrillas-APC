@@ -365,7 +365,9 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
     <div className="space-y-6">
       
       {/* Header Cliente & Selector de Parrillas */}
-      <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-sm space-y-4">
+      <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-sm space-y-4 relative overflow-hidden">
+        {/* Barra superior con gradiente Verde y Rosa de APC Digital Hub */}
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-pink-500" />
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-bold shadow-xs">
@@ -1500,7 +1502,7 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
             {/* Footer del Modal */}
             <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex items-center justify-between">
               <span className="text-[11px] text-slate-500 font-medium">
-                APC Publicidad • Agencia de Contenidos & Estrategia
+                APC Digital Hub • Aprobación de contenidos digitales
               </span>
               <button
                 onClick={() => setIsContactModalOpen(false)}

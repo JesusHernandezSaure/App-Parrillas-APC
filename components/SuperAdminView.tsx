@@ -252,15 +252,18 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         style={{ backgroundColor: '#0f172a' }}
         className="bg-slate-900 bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 rounded-2xl p-6 sm:p-8 text-white shadow-2xl border-2 border-slate-700 relative overflow-hidden"
       >
+        {/* Barra superior con gradiente Verde y Rosa de APC Digital Hub */}
+        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-pink-500" />
+
         <div className="absolute -right-10 -bottom-10 opacity-10 pointer-events-none">
-          <Crown className="w-80 h-80 text-amber-400" />
+          <Crown className="w-80 h-80 text-pink-400" />
         </div>
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-400 text-slate-950 text-xs font-black tracking-wider shadow-sm border border-amber-300">
-              <Crown className="w-4 h-4 fill-slate-950 text-slate-950" />
-              <span>SUPER ADMIN HUB • CONTROL TOTAL & AUTORIDAD ABSOLUTA</span>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-emerald-500 to-pink-500 text-white text-xs font-black tracking-wider shadow-sm border border-pink-300/30">
+              <Crown className="w-4 h-4 fill-white text-white" />
+              <span>APC DIGITAL HUB • CONSOLA MAESTRA SUPER ADMIN</span>
             </div>
             
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white flex items-center gap-3 drop-shadow-sm">
@@ -277,7 +280,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
           <div className="flex flex-wrap items-center gap-3 shrink-0">
             <button
               onClick={() => handleOpenUserModal()}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-lg transition-all cursor-pointer hover:scale-105 active:scale-95"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-xs shadow-lg shadow-emerald-500/20 transition-all cursor-pointer hover:scale-105 active:scale-95"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Nuevo Usuario</span>
