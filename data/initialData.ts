@@ -199,6 +199,20 @@ export const INITIAL_USERS: User[] = [
     email: 'kevin.av@apcagencia.com',
     password: '123',
     isActive: true
+  },
+  { 
+    id: 'u-cliente-demo', 
+    username: 'cliente.apc', 
+    name: 'Lic. Mariana Valdés (Cliente Multi-Marca)', 
+    role: 'Cliente', 
+    cargo: 'Directora de Marca & Contenidos',
+    email: 'mariana.valdes@clientehub.com',
+    phone: '+52 55 5555 1234',
+    whatsapp: '+525555551234',
+    password: '123',
+    isActive: true,
+    clientId: 'c-1791818110481',
+    clientIds: ['c-1791818110481', 'c-chinoin-01']
   }
 ];
 
@@ -213,10 +227,25 @@ export const INITIAL_CLIENTS: Client[] = [
     ejecutivoPhone: '+(52)5511871349',
     ejecutivoWhatsapp: '+525511871349',
     ejecutivoHorario: 'Lunes a Viernes, 9:00 AM - 6:00 PM',
-    clientUserIds: [],
+    clientUserIds: ['u-cliente-demo'],
     status: 'Activo',
     createdAt: '2026-10-12',
-    industry: 'Farmaceutica Ácido Fólico'
+    industry: 'Farmacéutica Ácido Fólico'
+  },
+  {
+    id: 'c-chinoin-01',
+    name: 'Chinoin Farmacéutica',
+    ejecutivoId: 'u-1791583303136',
+    ejecutivoName: 'Brenda Sosa',
+    ejecutivoCargo: 'Ejecutivo de Cuentas Digital',
+    ejecutivoEmail: 'bren.sosa@apcpublicidad.com',
+    ejecutivoPhone: '+(52)5511871349',
+    ejecutivoWhatsapp: '+525511871349',
+    ejecutivoHorario: 'Lunes a Viernes, 9:00 AM - 6:00 PM',
+    clientUserIds: ['u-cliente-demo'],
+    status: 'Activo',
+    createdAt: '2026-10-14',
+    industry: 'Salud y Alivio Respiratorio'
   }
 ];
 
@@ -250,6 +279,37 @@ export const INITIAL_ODTS: ODT[] = [
     editorAvName: 'Audio y Video (Editor A/V)',
     estadoGeneral: 'En Creación',
     createdAt: '2026-10-12',
+    rondasAprobacion: []
+  },
+  {
+    id: 'odt-chinoin-33370',
+    numeroODT: '33370 Antiflu-Des Invierno',
+    clientId: 'c-chinoin-01',
+    clientName: 'Chinoin Farmacéutica',
+    nombreParrilla: 'Parrilla Antiflu-Des Noviembre',
+    mesPeriodo: 'Noviembre 2026',
+    brief: 'Parrilla de prevención y alivio de síntomas invernales',
+    objetivo: 'Posicionamiento y consideración de marca en temporada invernal',
+    redesSociales: ['Instagram', 'Facebook'],
+    ejecutivoId: 'u-1791583303136',
+    ejecutivoName: 'Brenda Sosa',
+    fechaInicio: '2026-10-14',
+    fechaObjetivo: '2026-11-05',
+    requiereMedico: true,
+    requiereArte: true,
+    requiereAudioVideo: false,
+    communityId: 'u4',
+    communityName: 'Berenice Angeles (Community)',
+    correctorId: 'u6',
+    correctorName: 'Paty QA (Calidad)',
+    medicoId: 'u-1790969154706',
+    medicoName: 'Dra. Nadia Contreras',
+    disenadorId: 'u-1791582975323',
+    disenadorName: 'Ania Jaime',
+    editorAvId: 'u8',
+    editorAvName: 'Audio y Video (Editor A/V)',
+    estadoGeneral: 'En Aprobación',
+    createdAt: '2026-10-14',
     rondasAprobacion: []
   }
 ];

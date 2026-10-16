@@ -18,6 +18,8 @@ interface ClienteViewProps {
   posts: Post[];
   odts: ODT[];
   client: Client;
+  availableClients?: Client[];
+  onSelectClient?: (clientId: string) => void;
   currentUser: User;
   users?: User[];
   onBatchApproveParrilla: (odtId: string, tipo: 'COPY' | 'MATERIAL', generalComment?: string) => void;
@@ -34,6 +36,8 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
   posts,
   odts,
   client,
+  availableClients,
+  onSelectClient,
   currentUser,
   users,
   onBatchApproveParrilla,
@@ -48,6 +52,18 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
   const [selectedOdtId, setSelectedOdtId] = useState<string>(() => {
     return clientOdts.length > 0 ? clientOdts[0].id : '';
   });
+
+  // Si cambia el cliente seleccionado (por conmutador multi-marca), resetear a la primera ODT de esa marca
+  useEffect(() => {
+    const brandOdts = odts.filter(o => o.clientId === client.id);
+    if (brandOdts.length > 0) {
+      if (!brandOdts.some(o => o.id === selectedOdtId)) {
+        setSelectedOdtId(brandOdts[0].id);
+      }
+    } else {
+      setSelectedOdtId('');
+    }
+  }, [client.id, odts]);
 
   // Asegurar ODT seleccionada válida si cambia la lista
   const activeOdt = useMemo(() => {
@@ -351,18 +367,131 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
 
   if (!activeOdt || clientOdts.length === 0) {
     return (
-      <div className="bg-white rounded-2xl p-12 border border-slate-200 text-center shadow-xs">
-        <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-        <h3 className="text-base font-bold text-slate-800">No hay Parrillas disponibles</h3>
-        <p className="text-xs text-slate-500 mt-1">
-          Tu equipo de cuenta APC no ha asignado ninguna parrilla activa en este momento.
-        </p>
+      <div className="space-y-4">
+        {/* Selector de Marcas Asignadas (Multi-Empresa) para cambiar de marca aun si esta no tiene parrillas */}
+        {availableClients && availableClients.length > 1 && (
+          <div className="bg-white rounded-2xl p-4 border border-cyan-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-cyan-100 text-cyan-800 flex items-center justify-center font-bold">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-wider text-cyan-900">
+                  Tus Marcas / Empresas Asignadas
+                </div>
+                <div className="text-xs text-slate-500">
+                  Tienes acceso a {availableClients.length} cuentas. Selecciona una marca para revisar sus parrillas:
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {availableClients.map(c => {
+                const isCurrent = c.id === client.id;
+                const brandOdts = odts.filter(o => o.clientId === c.id);
+                const brandPending = posts.filter(p => p.clientId === c.id && p.estado === 'Aprobación Copy Cliente').length;
+
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => onSelectClient?.(c.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
+                      isCurrent
+                        ? 'bg-cyan-700 text-white border-cyan-800 shadow-xs ring-2 ring-cyan-400/50'
+                        : 'bg-slate-50 hover:bg-cyan-50 text-slate-700 hover:text-cyan-900 border-slate-200 hover:border-cyan-300'
+                    }`}
+                  >
+                    <Building2 className={`w-3.5 h-3.5 ${isCurrent ? 'text-cyan-200' : 'text-slate-400'}`} />
+                    <span>{c.name}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isCurrent ? 'bg-cyan-900 text-cyan-100' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {brandOdts.length}
+                    </span>
+                    {brandPending > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-900 font-black animate-pulse">
+                        {brandPending}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white rounded-2xl p-12 border border-slate-200 text-center shadow-xs">
+          <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-base font-bold text-slate-800">No hay Parrillas disponibles para {client.name}</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Tu equipo de cuenta APC no ha asignado ninguna parrilla activa en este momento para esta marca.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+
+      {/* Selector Superior de Marcas / Empresas Asignadas (Multi-Empresa) */}
+      {availableClients && availableClients.length > 1 && (
+        <div className="bg-white rounded-2xl p-4 border border-cyan-200/90 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-pink-500 text-white flex items-center justify-center font-bold shadow-xs">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-900">
+                  Tus Marcas / Empresas Asignadas
+                </span>
+                <span className="text-[10px] px-2 py-0.2 bg-cyan-100 text-cyan-900 rounded-full font-extrabold border border-cyan-200">
+                  {availableClients.length} marcas autorizadas
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Haz clic en cualquier marca para auditar y dictaminar sus contenidos correspondientes:
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {availableClients.map(c => {
+              const isCurrent = c.id === client.id;
+              const brandOdts = odts.filter(o => o.clientId === c.id);
+              const brandPending = posts.filter(p => p.clientId === c.id && p.estado === 'Aprobación Copy Cliente').length;
+
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onSelectClient?.(c.id)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
+                    isCurrent
+                      ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 text-white border-teal-800 shadow-sm ring-2 ring-emerald-400/50'
+                      : 'bg-slate-50 hover:bg-cyan-50 text-slate-700 hover:text-cyan-900 border-slate-200 hover:border-cyan-300'
+                  }`}
+                >
+                  <Building2 className={`w-3.5 h-3.5 ${isCurrent ? 'text-emerald-100' : 'text-slate-400'}`} />
+                  <span>{c.name}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    isCurrent ? 'bg-black/30 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {brandOdts.length} {brandOdts.length === 1 ? 'parrilla' : 'parrillas'}
+                  </span>
+                  {brandPending > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black animate-pulse shadow-2xs">
+                      {brandPending} por revisar
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       
       {/* Header Cliente & Selector de Parrillas */}
       <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-sm space-y-4 relative overflow-hidden">

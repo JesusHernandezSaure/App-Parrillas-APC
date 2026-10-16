@@ -163,11 +163,35 @@ export const App: React.FC = () => {
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [createPostOdt, setCreatePostOdt] = useState<ODT | null>(null);
 
-  // Cliente asociado si el usuario es de rol 'Cliente'
-  const currentClient = useMemo(() => {
-    if (currentUser.role !== 'Cliente' || !currentUser.clientId) return null;
-    return clients.find(c => c.id === currentUser.clientId) || null;
+  // Lista de empresas/clientes autorizados para el usuario actual (soporte multi-empresa)
+  const authorizedClientsForUser = useMemo(() => {
+    if (currentUser.role !== 'Cliente') return clients;
+    const allowedIds = new Set<string>();
+    if (Array.isArray(currentUser.clientIds) && currentUser.clientIds.length > 0) {
+      currentUser.clientIds.forEach(id => allowedIds.add(id));
+    }
+    if (currentUser.clientId) {
+      allowedIds.add(currentUser.clientId);
+    }
+    if (allowedIds.size === 0) return clients; // fallback seguro si no tiene empresas asignadas
+    const list = clients.filter(c => allowedIds.has(c.id));
+    return list.length > 0 ? list : clients;
   }, [currentUser, clients]);
+
+  // Cliente activo para la vista del usuario
+  const currentClient = useMemo(() => {
+    if (currentUser.role !== 'Cliente') return null;
+    // 1. Si el usuario ha seleccionado una empresa específica y está autorizada
+    if (selectedClientId && authorizedClientsForUser.some(c => c.id === selectedClientId)) {
+      return clients.find(c => c.id === selectedClientId) || null;
+    }
+    // 2. Si el usuario tiene una empresa principal por defecto y está autorizada
+    if (currentUser.clientId && authorizedClientsForUser.some(c => c.id === currentUser.clientId)) {
+      return clients.find(c => c.id === currentUser.clientId) || null;
+    }
+    // 3. Primera empresa de las autorizadas
+    return authorizedClientsForUser[0] || clients[0] || null;
+  }, [currentUser, clients, selectedClientId, authorizedClientsForUser]);
 
   // Sincronización con persistencia en LocalStorage y Firestore en tiempo real
   const updatePostsState = (newPosts: Post[]) => {
@@ -1372,8 +1396,13 @@ export const App: React.FC = () => {
       setLoginError('');
       setLoginUsername('');
       setLoginPassword('');
-      if (foundUser.role === 'Cliente' && foundUser.clientId) {
-        setSelectedClientId(foundUser.clientId);
+      if (foundUser.role === 'Cliente') {
+        const targetClientId = (foundUser.clientIds && foundUser.clientIds.length > 0)
+          ? (foundUser.clientId && foundUser.clientIds.includes(foundUser.clientId) ? foundUser.clientId : foundUser.clientIds[0])
+          : foundUser.clientId;
+        if (targetClientId) {
+          setSelectedClientId(targetClientId);
+        }
       }
     } else {
       console.warn("Login failed: Invalid username or password");
@@ -1489,8 +1518,13 @@ export const App: React.FC = () => {
       setCurrentUser(user);
       setSuperAdminRoleView(null);
       localStorage.setItem('apc_simulated_user_id', user.id);
-      if (user.role === 'Cliente' && user.clientId) {
-        setSelectedClientId(user.clientId);
+      if (user.role === 'Cliente') {
+        const targetClientId = (user.clientIds && user.clientIds.length > 0)
+          ? (user.clientId && user.clientIds.includes(user.clientId) ? user.clientId : user.clientIds[0])
+          : user.clientId;
+        if (targetClientId) {
+          setSelectedClientId(targetClientId);
+        }
       }
     }
   };
@@ -1742,7 +1776,9 @@ export const App: React.FC = () => {
           <ClienteView
             posts={posts}
             odts={odts}
-            client={currentClient || (selectedClientId ? clients.find(c => c.id === selectedClientId) : null) || clients[0]}
+            client={currentClient || (selectedClientId ? clients.find(c => c.id === selectedClientId) : null) || authorizedClientsForUser[0] || clients[0]}
+            availableClients={authorizedClientsForUser}
+            onSelectClient={(cId) => setSelectedClientId(cId)}
             currentUser={currentUser}
             users={users}
             onBatchApproveParrilla={handleBatchApproveParrilla}

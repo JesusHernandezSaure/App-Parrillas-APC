@@ -131,14 +131,28 @@ export function getStoredUsers(): User[] {
     const data = localStorage.getItem(USERS_KEY);
     const parsed: User[] = data ? JSON.parse(data) : INITIAL_USERS;
     
-    // Garantizar que superadmin siempre exista
+    // Garantizar que superadmin y usuarios base existan
     const hasSuperAdmin = parsed.some(u => u.id === 'u1' || u.role === 'Super Admin');
-    const baseList = hasSuperAdmin ? parsed : [INITIAL_USERS[0], ...parsed];
+    const existingIds = new Set(parsed.map(u => u.id));
+    const mergedList = [...parsed];
+    INITIAL_USERS.forEach(iu => {
+      if (!existingIds.has(iu.id)) {
+        mergedList.push(iu);
+      }
+    });
+    const baseList = hasSuperAdmin ? mergedList : [INITIAL_USERS[0], ...mergedList];
 
     return baseList.map(u => {
       const init = INITIAL_USERS.find(iu => iu.id === u.id);
       const isSuper = u.id === 'u1' || u.role === 'Super Admin';
       const role = isSuper ? 'Super Admin' : u.role;
+      const normalizedClientIds = (u.clientIds && u.clientIds.length > 0)
+        ? u.clientIds
+        : (init?.clientIds && init.clientIds.length > 0)
+        ? init.clientIds
+        : (u.clientId ? [u.clientId] : (init?.clientId ? [init.clientId] : []));
+      const normalizedClientId = u.clientId || init?.clientId || (normalizedClientIds.length > 0 ? normalizedClientIds[0] : undefined);
+
       return {
         ...init,
         ...u,
@@ -147,6 +161,8 @@ export function getStoredUsers(): User[] {
         permissions: isSuper 
           ? FULL_PERMISSIONS 
           : (u.permissions || getDefaultPermissions(role)),
+        clientId: role === 'Cliente' ? normalizedClientId : undefined,
+        clientIds: role === 'Cliente' ? normalizedClientIds : undefined,
         phone: u.phone || init?.phone,
         email: u.email || init?.email,
         cargo: u.cargo || init?.cargo,
@@ -165,7 +181,15 @@ export function getStoredClients(): Client[] {
     const data = localStorage.getItem(CLIENTS_KEY);
     if (!data) return INITIAL_CLIENTS;
     const parsed: Client[] = JSON.parse(data);
-    return parsed.map(c => {
+    const existingIds = new Set(parsed.map(c => c.id));
+    const merged = [...parsed];
+    INITIAL_CLIENTS.forEach(ic => {
+      if (!existingIds.has(ic.id)) {
+        merged.push(ic);
+      }
+    });
+
+    return merged.map(c => {
       const init = INITIAL_CLIENTS.find(ic => ic.id === c.id);
       return init ? {
         ...init,

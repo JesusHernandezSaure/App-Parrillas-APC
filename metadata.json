@@ -1,6 +1,6 @@
 {
   "name": "APC Enterprise ODT System",
-  "description": "Sistema de gestión y producción de ODT y Parrillas de contenidos para APC Publicidad: flujo operativo ISO, aprobaciones y publicación.",
+  "description": "APC Digital Hub - Aprobación de contenidos digitales: gestión y producción de ODT y Parrillas de contenidos, flujo operativo y aprobaciones.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

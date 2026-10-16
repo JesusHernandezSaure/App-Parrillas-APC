@@ -24,7 +24,11 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
   const [clientId, setClientId] = useState(initialClientId || (clients[0]?.id || ''));
   const [numeroODT, setNumeroODT] = useState(`ODT-2026-00${Math.floor(Math.random() * 900 + 100)}`);
   const [nombreParrilla, setNombreParrilla] = useState('');
-  const [mesPeriodo, setMesPeriodo] = useState('Noviembre 2026');
+  const [mesPeriodo, setMesPeriodo] = useState(() => {
+    const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const now = new Date();
+    return `${months[now.getMonth()]} ${now.getFullYear()}`;
+  });
   const [brief, setBrief] = useState('');
   const [objetivo, setObjetivo] = useState('');
   const [redesSociales, setRedesSociales] = useState<string[]>(['Instagram', 'Facebook']);
@@ -164,11 +168,20 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
               <input
                 type="text"
                 required
+                list="meses-sugeridos"
                 placeholder="ej. Noviembre 2026"
-                className="w-full text-sm px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="w-full text-sm px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 value={mesPeriodo}
                 onChange={(e) => setMesPeriodo(e.target.value)}
               />
+              <datalist id="meses-sugeridos">
+                <option value="Octubre 2026" />
+                <option value="Noviembre 2026" />
+                <option value="Diciembre 2026" />
+                <option value="Enero 2027" />
+                <option value="Febrero 2027" />
+                <option value="Marzo 2027" />
+              </datalist>
             </div>
           </div>
 

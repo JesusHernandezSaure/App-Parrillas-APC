@@ -140,7 +140,14 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   const handleOpenUserModal = (userToEdit?: User) => {
     if (userToEdit) {
       setEditingUser(userToEdit);
-      setUserFormData({ ...userToEdit });
+      const initialClientIds = (userToEdit.clientIds && userToEdit.clientIds.length > 0)
+        ? [...userToEdit.clientIds]
+        : (userToEdit.clientId ? [userToEdit.clientId] : []);
+      setUserFormData({
+        ...userToEdit,
+        clientIds: initialClientIds,
+        clientId: userToEdit.clientId || (initialClientIds.length > 0 ? initialClientIds[0] : undefined)
+      });
       setUserPermissions(userToEdit.permissions || getDefaultPermissions(userToEdit.role));
     } else {
       const newId = `u-${Date.now()}`;
@@ -158,6 +165,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         horarioAtencion: 'Lunes a Viernes, 9:00 AM - 6:00 PM',
         password: '123',
         isActive: true,
+        clientIds: [],
+        clientId: undefined
       });
       setUserPermissions(getDefaultPermissions(defaultRole));
     }
@@ -165,7 +174,20 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   };
 
   const handleRoleChangeInModal = (role: UserRole) => {
-    setUserFormData(prev => ({ ...prev, role }));
+    setUserFormData(prev => {
+      let nextClientIds = prev.clientIds;
+      let nextClientId = prev.clientId;
+      if (role === 'Cliente' && (!nextClientIds || nextClientIds.length === 0) && clients.length > 0) {
+        nextClientIds = [clients[0].id];
+        nextClientId = clients[0].id;
+      }
+      return {
+        ...prev,
+        role,
+        clientIds: nextClientIds,
+        clientId: nextClientId
+      };
+    });
     setUserPermissions(getDefaultPermissions(role));
   };
 
@@ -175,12 +197,33 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
       alert('Por favor completa el nombre y nombre de usuario.');
       return;
     }
+
+    // Procesar marcas/empresas asociadas para rol 'Cliente'
+    let selectedClientIds: string[] | undefined = undefined;
+    let primaryClientId: string | undefined = undefined;
+
+    if (userFormData.role === 'Cliente') {
+      const ids = userFormData.clientIds && userFormData.clientIds.length > 0
+        ? userFormData.clientIds
+        : (userFormData.clientId ? [userFormData.clientId] : []);
+      
+      if (ids.length === 0) {
+        alert('Debes asignar al menos una empresa/marca al usuario con perfil Cliente.');
+        return;
+      }
+      selectedClientIds = ids;
+      primaryClientId = userFormData.clientId && ids.includes(userFormData.clientId)
+        ? userFormData.clientId
+        : ids[0];
+    }
+
     const finalUser: User = {
       id: userFormData.id || `u-${Date.now()}`,
       name: userFormData.name.trim(),
       username: userFormData.username.trim(),
       role: (userFormData.role as UserRole) || 'Community',
-      clientId: userFormData.role === 'Cliente' ? userFormData.clientId : undefined,
+      clientId: primaryClientId,
+      clientIds: selectedClientIds,
       email: userFormData.email?.trim() || undefined,
       phone: userFormData.phone?.trim() || undefined,
       cargo: userFormData.cargo?.trim() || undefined,
@@ -515,15 +558,48 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
                         <td className="py-3.5 px-4">
                           {u.role === 'Cliente' ? (
-                            client ? (
-                              <span className="font-semibold text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200">
-                                {client.name}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 italic">Sin empresa asignada</span>
-                            )
+                            (() => {
+                              const assignedIds = (u.clientIds && u.clientIds.length > 0)
+                                ? u.clientIds
+                                : (u.clientId ? [u.clientId] : []);
+                              const assignedClients = clients.filter(c => assignedIds.includes(c.id));
+
+                              if (assignedClients.length === 0) {
+                                return <span className="text-slate-400 italic text-xs">Sin empresa asignada</span>;
+                              }
+
+                              return (
+                                <div className="flex flex-wrap items-center gap-1.5 max-w-xs">
+                                  {assignedClients.map((c) => {
+                                    const isPrimary = c.id === u.clientId;
+                                    return (
+                                      <span
+                                        key={c.id}
+                                        className={`inline-flex items-center gap-1 font-semibold text-xs px-2 py-0.5 rounded border ${
+                                          isPrimary
+                                            ? 'bg-cyan-50 text-cyan-900 border-cyan-300 font-bold'
+                                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                                        }`}
+                                        title={isPrimary ? `${c.name} (Marca Principal)` : c.name}
+                                      >
+                                        <Building2 className="w-3 h-3 text-cyan-600" />
+                                        <span>{c.name}</span>
+                                        {isPrimary && assignedClients.length > 1 && (
+                                          <span className="text-[9px] text-cyan-700 font-black">★</span>
+                                        )}
+                                      </span>
+                                    );
+                                  })}
+                                  {assignedClients.length > 1 && (
+                                    <span className="text-[10px] text-cyan-700 font-bold bg-cyan-50 px-1.5 py-0.2 rounded border border-cyan-200">
+                                      {assignedClients.length} marcas
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()
                           ) : (
-                            <span className="text-slate-600">Equipo APC Publicidad</span>
+                            <span className="text-slate-600 text-xs font-medium">Equipo APC Publicidad</span>
                           )}
                         </td>
 
@@ -601,7 +677,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {clients.map((client) => {
               const clientOdts = odts.filter(o => o.clientId === client.id);
-              const clientUsers = users.filter(u => u.clientId === client.id);
+              const clientUsers = users.filter(u => u.clientId === client.id || (u.clientIds && u.clientIds.includes(client.id)));
 
               return (
                 <div key={client.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs hover:border-cyan-300 transition-all space-y-4">
@@ -1131,18 +1207,164 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                   </div>
 
                   {userFormData.role === 'Cliente' && (
-                    <div>
-                      <label className="block font-bold text-cyan-800 mb-1">Empresa Cliente Asociada *</label>
-                      <select
-                        value={userFormData.clientId || ''}
-                        onChange={(e) => setUserFormData(prev => ({ ...prev, clientId: e.target.value }))}
-                        className="w-full px-3 py-2 border border-cyan-300 rounded-lg font-semibold bg-cyan-50/50 text-cyan-900 focus:ring-2 focus:ring-cyan-500 focus:outline-hidden"
-                      >
-                        <option value="">Selecciona Empresa Cliente...</option>
-                        {clients.map(c => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
+                    <div className="bg-cyan-50/70 border-2 border-cyan-300 rounded-xl p-4 space-y-3.5 shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-cyan-200 pb-2.5">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="w-4 h-4 text-cyan-700" />
+                            <label className="block font-black text-cyan-950 text-sm">
+                              Empresas / Marcas Autorizadas (Multi-Marca) *
+                            </label>
+                          </div>
+                          <p className="text-[11px] text-cyan-800 font-medium mt-0.5">
+                            Selecciona 1 o más marcas. El usuario podrá alternar entre ellas para auditar y aprobar sus contenidos.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allIds = clients.map(c => c.id);
+                              setUserFormData(prev => ({
+                                ...prev,
+                                clientIds: allIds,
+                                clientId: prev.clientId && allIds.includes(prev.clientId) ? prev.clientId : allIds[0]
+                              }));
+                            }}
+                            className="text-[10px] font-bold text-cyan-900 bg-cyan-200/80 hover:bg-cyan-300 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                          >
+                            Seleccionar todas
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUserFormData(prev => ({
+                                ...prev,
+                                clientIds: [],
+                                clientId: undefined
+                              }));
+                            }}
+                            className="text-[10px] font-bold text-slate-600 bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                          >
+                            Limpiar
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Lista interactiva de marcas con checkboxes */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                        {clients.map(c => {
+                          const currentSelectedList = (userFormData.clientIds && userFormData.clientIds.length > 0)
+                            ? userFormData.clientIds
+                            : (userFormData.clientId ? [userFormData.clientId] : []);
+                          const isSelected = currentSelectedList.includes(c.id);
+                          const clientOdtCount = odts.filter(o => o.clientId === c.id).length;
+
+                          return (
+                            <label
+                              key={c.id}
+                              className={`flex items-start gap-2.5 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                                isSelected
+                                  ? 'bg-white border-cyan-500 shadow-xs ring-1 ring-cyan-500/30'
+                                  : 'bg-white/70 border-slate-200 hover:border-cyan-300 hover:bg-white'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  let nextIds = [...currentSelectedList];
+                                  if (checked) {
+                                    if (!nextIds.includes(c.id)) nextIds.push(c.id);
+                                  } else {
+                                    nextIds = nextIds.filter(id => id !== c.id);
+                                  }
+                                  const nextPrimary = nextIds.includes(userFormData.clientId || '')
+                                    ? userFormData.clientId
+                                    : (nextIds[0] || undefined);
+                                  setUserFormData(prev => ({
+                                    ...prev,
+                                    clientIds: nextIds,
+                                    clientId: nextPrimary
+                                  }));
+                                }}
+                                className="mt-0.5 rounded text-cyan-600 focus:ring-cyan-500 w-4 h-4 cursor-pointer"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="font-extrabold text-xs text-slate-900 flex items-center justify-between gap-1">
+                                  <span className="truncate">{c.name}</span>
+                                  {userFormData.clientId === c.id && isSelected && (
+                                    <span className="text-[9px] bg-cyan-100 text-cyan-800 px-1.5 py-0.2 rounded font-black shrink-0 border border-cyan-300">
+                                      Principal
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                                  {c.industry || 'Empresa Cliente'} • {clientOdtCount} {clientOdtCount === 1 ? 'parrilla' : 'parrillas'}
+                                </div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      {/* Selector de Marca Principal / Predeterminada si hay más de 1 marca seleccionada */}
+                      {(() => {
+                        const currentSelectedList = (userFormData.clientIds && userFormData.clientIds.length > 0)
+                          ? userFormData.clientIds
+                          : (userFormData.clientId ? [userFormData.clientId] : []);
+                        
+                        if (currentSelectedList.length > 1) {
+                          return (
+                            <div className="pt-2.5 border-t border-cyan-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white/60 p-2.5 rounded-lg border border-cyan-200">
+                              <label className="text-xs font-bold text-cyan-950 flex items-center gap-1.5">
+                                <span>Marca Principal (Se abrirá por defecto):</span>
+                              </label>
+                              <select
+                                value={userFormData.clientId || currentSelectedList[0]}
+                                onChange={(e) => setUserFormData(prev => ({ ...prev, clientId: e.target.value }))}
+                                className="text-xs font-bold bg-white border border-cyan-300 rounded-lg px-2.5 py-1.5 text-cyan-900 focus:ring-2 focus:ring-cyan-500 focus:outline-hidden cursor-pointer"
+                              >
+                                {currentSelectedList.map(id => {
+                                  const foundClient = clients.find(c => c.id === id);
+                                  return (
+                                    <option key={id} value={id}>
+                                      {foundClient ? foundClient.name : id}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+
+                      {/* Resumen & Validación de marcas */}
+                      <div className="pt-1 flex items-center justify-between text-[11px] font-bold">
+                        {(() => {
+                          const currentSelectedList = (userFormData.clientIds && userFormData.clientIds.length > 0)
+                            ? userFormData.clientIds
+                            : (userFormData.clientId ? [userFormData.clientId] : []);
+                          
+                          if (currentSelectedList.length === 0) {
+                            return (
+                              <span className="text-rose-600 font-bold flex items-center gap-1">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                Por favor selecciona al menos 1 empresa asociada
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="text-cyan-900 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              {currentSelectedList.length} {currentSelectedList.length === 1 ? 'marca asignada' : 'marcas asignadas con acceso de revisión'}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </div>
                   )}
 

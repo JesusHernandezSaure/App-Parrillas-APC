@@ -30,7 +30,8 @@ export interface User {
   username: string;
   name: string;
   role: UserRole;
-  clientId?: string; // Solo para usuarios con rol 'Cliente'
+  clientId?: string; // Solo para usuarios con rol 'Cliente' (marca principal de compatibilidad)
+  clientIds?: string[]; // Múltiples marcas/clientes autorizados para este usuario
   email?: string;
   avatar?: string;
   password?: string;
