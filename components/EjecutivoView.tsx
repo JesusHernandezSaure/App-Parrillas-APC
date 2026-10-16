@@ -7,7 +7,7 @@ import {
   Copy, RefreshCw, X, Share2, Globe, Edit3, CheckSquare, Palette, Video, FileText
 } from 'lucide-react';
 import { 
-  OdtPipelineFunnel, PostStageMap, MACRO_STAGES, getMacroStageForStatus, 
+  PostStageMap, MACRO_STAGES, getMacroStageForStatus, 
   getDaysInCurrentStage, getPostPacing 
 } from './PostPipelineTracker';
 import { RichTextDisplay, stripHtml } from './RichTextDisplay';
@@ -195,7 +195,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
 
   // Estados para el Panel Adaptativo de 3 Niveles
   const [selectedPeriod, setSelectedPeriod] = useState<string>('current');
-  const [selectedOdtCardFilter, setSelectedOdtCardFilter] = useState<'all' | 'created' | 'published' | 'carry_over'>('all');
+  const [selectedOdtCardFilter, setSelectedOdtCardFilter] = useState<'all' | 'created' | 'to_publish' | 'published' | 'carry_over'>('all');
   const [selectedLevel3Stage, setSelectedLevel3Stage] = useState<Level3StageKey>('all');
 
   const isOdtCreator = canCreateOdt !== false && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin');
@@ -369,38 +369,91 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
     return selectedPeriod;
   }, [selectedPeriod, defaultPeriod]);
 
+  /**
+   * Obtiene el índice cronológico de CREACIÓN de la ODT (usando createdAt o fechaInicio o timestamp del ID)
+   */
+  const getOdtCreationPeriodIndex = (odt: ODT): number | null => {
+    if (odt.createdAt) {
+      const idx = getPeriodChronologicalIndex(odt.createdAt);
+      if (idx !== null) return idx;
+    }
+    // Si tiene timestamp numérico en el ID (ej: odt-1791818331658)
+    if (odt.id && odt.id.startsWith('odt-')) {
+      const tsStr = odt.id.replace('odt-', '');
+      const ts = parseInt(tsStr, 10);
+      if (!isNaN(ts) && ts > 1000000000000) {
+        const d = new Date(ts);
+        return d.getFullYear() * 12 + (d.getMonth() + 1);
+      }
+    }
+    if (odt.fechaInicio) {
+      const idx = getPeriodChronologicalIndex(odt.fechaInicio);
+      if (idx !== null) return idx;
+    }
+    return null;
+  };
+
+  /**
+   * Obtiene el índice cronológico de PUBLICACIÓN o compromiso de la ODT (usando mesPeriodo o fechaObjetivo)
+   */
+  const getOdtPublishPeriodIndex = (odt: ODT): number | null => {
+    if (odt.mesPeriodo) {
+      const idx = getPeriodChronologicalIndex(odt.mesPeriodo);
+      if (idx !== null) return idx;
+    }
+    if (odt.fechaObjetivo) {
+      const idx = getPeriodChronologicalIndex(odt.fechaObjetivo);
+      if (idx !== null) return idx;
+    }
+    return null;
+  };
+
+
   const isOdtPublished = (odt: ODT) => {
-    if (odt.estadoGeneral === 'Completado') return true;
+    if (odt.estadoGeneral === 'Completado' || odt.estadoGeneral === 'Publicado') return true;
     const odtPosts = posts.filter(p => p.odtId === odt.id);
     return odtPosts.length > 0 && odtPosts.every(p => p.publicado || p.estado === 'Publicado');
   };
 
-  const isOdtInPeriod = (odt: ODT) => {
+  // 1. ODT creada durante el mes corriente (createdAt)
+  const isOdtCreatedInPeriod = (odt: ODT) => {
     if (selectedPeriod === 'all') return true;
-
-    // Comparar por índice cronológico exacto
     const activeIdx = getPeriodChronologicalIndex(activePeriodName);
-    const odtIdx = getOdtChronologicalIndex(odt);
-    if (activeIdx !== null && odtIdx !== null) {
-      return activeIdx === odtIdx;
+    const createdIdx = getOdtCreationPeriodIndex(odt);
+    if (activeIdx !== null && createdIdx !== null) {
+      return activeIdx === createdIdx;
     }
-
-    // Fallback por texto
-    const periodToMatch = activePeriodName.toLowerCase().trim();
-    if (odt.mesPeriodo && odt.mesPeriodo.toLowerCase().trim() === periodToMatch) return true;
-    if (odt.createdAt && odt.createdAt.includes(activePeriodName)) return true;
+    if (odt.createdAt && odt.createdAt.toLowerCase().includes(activePeriodName.toLowerCase())) return true;
     return false;
   };
+
+  // 2. ODT/Parrilla que se debe publicar en este mes (mesPeriodo o fechaObjetivo)
+  const isOdtToPublishInPeriod = (odt: ODT) => {
+    if (selectedPeriod === 'all') return true;
+    const activeIdx = getPeriodChronologicalIndex(activePeriodName);
+    const publishIdx = getOdtPublishPeriodIndex(odt);
+    if (activeIdx !== null && publishIdx !== null) {
+      return activeIdx === publishIdx;
+    }
+    const periodToMatch = activePeriodName.toLowerCase().trim();
+    if (odt.mesPeriodo && odt.mesPeriodo.toLowerCase().trim() === periodToMatch) return true;
+    return false;
+  };
+
+  // Alias retrocompatible
+  const isOdtInPeriod = isOdtToPublishInPeriod;
 
   /**
    * REGLA ESTRICTA DE ARRASTRE:
    * 1. Una ODT completada/publicada al 100% NUNCA es arrastre.
-   * 2. ÚNICAMENTE es arrastre si su período asignado es ESTRICTAMENTE ANTERIOR al período activo.
-   *    Los meses futuros (ej: Noviembre o Diciembre cuando estás en Octubre) NUNCA son arrastre.
-   * 3. Si se visualiza "Todas las fechas", arrastre son aquellas cuya fecha objetivo ya pasó respecto a hoy.
+   * 2. Si la ODT tiene como fecha de publicación el mes activo o un mes futuro (publishIdx >= activeIdx),
+   *    NUNCA es arrastre en el mes activo (es una parrilla planificada para este período o futuro).
+   * 3. ÚNICAMENTE es arrastre si su compromiso de publicación correspondía a un mes ESTRICTAMENTE ANTERIOR al período activo (< activeIdx),
+   *    o si fue creada en un mes anterior sin fecha y aún no ha sido terminada/publicada.
+   * 4. Si se visualiza "Todas las fechas", arrastre son aquellas pendientes cuya fecha objetivo ya venció respecto a hoy.
    */
   const isOdtCarryOver = (odt: ODT) => {
-    // 1. Si ya está completada/publicada al 100%, no es arrastre
+    // 1. Si ya está completada/publicada al 100%, nunca es arrastre
     if (isOdtPublished(odt)) return false;
 
     // 2. Si estamos en "Todas las fechas"
@@ -414,20 +467,24 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
     }
 
     const activeIdx = getPeriodChronologicalIndex(activePeriodName);
-    const odtIdx = getOdtChronologicalIndex(odt);
+    if (activeIdx === null) return false;
 
-    // 3. Comparación cronológica estricta:
-    // SOLO es arrastre si el período de la ODT es MENOR (anterior) al mes activo
-    if (activeIdx !== null && odtIdx !== null) {
-      return odtIdx < activeIdx;
+    const publishIdx = getOdtPublishPeriodIndex(odt);
+    const creationIdx = getOdtCreationPeriodIndex(odt);
+
+    // Regla de Oro 1: Si la parrilla está comprometida para publicarse en el mes activo o meses futuros, NUNCA es arrastre
+    if (publishIdx !== null && publishIdx >= activeIdx) {
+      return false;
     }
 
-    // 4. Si la ODT no tiene mesPeriodo pero tiene fechaObjetivo
-    if (odt.fechaObjetivo && activeIdx !== null) {
-      const targetIdx = getPeriodChronologicalIndex(odt.fechaObjetivo);
-      if (targetIdx !== null) {
-        return targetIdx < activeIdx;
-      }
+    // Regla de Oro 2: Si su compromiso de publicación correspondía a un mes estrictamente anterior (< activeIdx) y no está terminada -> ES ARRASTRE
+    if (publishIdx !== null && publishIdx < activeIdx) {
+      return true;
+    }
+
+    // Regla de Oro 3: Si no tiene fecha de publicación pero fue creada en un mes estrictamente anterior (< activeIdx) y no está terminada -> ES ARRASTRE
+    if (creationIdx !== null && creationIdx < activeIdx) {
+      return true;
     }
 
     return false;
@@ -441,53 +498,57 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
     return clientOdts;
   }, [clientOdts, activeClient]);
 
-  // Métricas para Niveles 1 y 2
+  // Las 5 Métricas de Supervisión idénticas para Niveles 1 y 2
   const level1And2Metrics = useMemo(() => {
-    const periodOdts = scopedOdtsForMetrics.filter(isOdtInPeriod);
-    const createdCount = periodOdts.length;
-    const publishedCount = periodOdts.filter(isOdtPublished).length;
+    // 1. ODTs creadas durante el mes corriente
+    const createdOdts = scopedOdtsForMetrics.filter(isOdtCreatedInPeriod);
+    const createdCount = createdOdts.length;
+
+    // 2. ODT/Parrillas que se deben publicar en este mes
+    const toPublishOdts = scopedOdtsForMetrics.filter(isOdtToPublishInPeriod);
+    const toPublishCount = toPublishOdts.length;
+
+    // 3. Parrillas ya publicadas
+    const publishedOdts = toPublishOdts.filter(isOdtPublished);
+    const publishedCount = publishedOdts.length;
+
+    // 4. Eficiencia % de entrega:
+    // Cumplimiento de publicación del mes
+    const efficiencyPct = toPublishCount > 0 
+      ? Math.round((publishedCount / toPublishCount) * 100) 
+      : (createdCount > 0 && publishedCount > 0 ? 100 : (toPublishCount === 0 && scopedOdtsForMetrics.length > 0 ? 100 : 0));
+
+    // 5. Arrastre: parrillas creadas el mes anterior y no terminadas
     const carryOverOdts = scopedOdtsForMetrics.filter(isOdtCarryOver);
     const carryOverCount = carryOverOdts.length;
 
-    const efficiencyPct = createdCount > 0 
-      ? Math.round((publishedCount / createdCount) * 100) 
-      : (scopedOdtsForMetrics.length > 0 && carryOverCount === 0 ? 100 : 0);
-
-    // Clientes con arrastre vs al día (para Nivel 1)
-    const clientsWithOverdue = myClients.filter(c => 
-      clientOdts.some(o => o.clientId === c.id && isOdtCarryOver(o))
-    ).length;
-    const clientsOnTrack = Math.max(0, myClients.length - clientsWithOverdue);
-
-    // Posts del cliente (para Nivel 2)
-    const clientPosts = activeClient ? posts.filter(p => p.clientId === activeClient.id) : [];
-    const clientReadyPosts = clientPosts.filter(p => p.estado === 'Listo para Publicar' || p.estado === 'Publicado').length;
-
     return {
       createdCount,
+      toPublishCount,
       publishedCount,
       efficiencyPct,
       carryOverCount,
       carryOverOdts,
-      clientsWithOverdue,
-      clientsOnTrack,
-      clientPostsCount: clientPosts.length,
-      clientReadyPosts
+      toPublishOdts,
+      createdOdts,
+      publishedOdts
     };
-  }, [scopedOdtsForMetrics, selectedPeriod, activePeriodName, posts, activeClient, myClients, clientOdts]);
+  }, [scopedOdtsForMetrics, selectedPeriod, activePeriodName, posts]);
 
   // Parrillas a mostrar en la vista de cliente (filtradas por tarjeta si se selecciona)
   const displayedClientOdts = useMemo(() => {
     let list = clientOdts;
     if (selectedOdtCardFilter === 'created') {
-      list = list.filter(isOdtInPeriod);
+      list = list.filter(isOdtCreatedInPeriod);
+    } else if (selectedOdtCardFilter === 'to_publish') {
+      list = list.filter(isOdtToPublishInPeriod);
     } else if (selectedOdtCardFilter === 'published') {
       list = list.filter(isOdtPublished);
     } else if (selectedOdtCardFilter === 'carry_over') {
       list = list.filter(isOdtCarryOver);
     }
     return list;
-  }, [clientOdts, selectedOdtCardFilter, isOdtInPeriod, isOdtPublished, isOdtCarryOver]);
+  }, [clientOdts, selectedOdtCardFilter, isOdtCreatedInPeriod, isOdtToPublishInPeriod, isOdtPublished, isOdtCarryOver]);
 
   // Clientes a mostrar en Nivel 1 (filtrados si se selecciona tarjeta de arrastre, publicadas, etc.)
   const displayedClients = useMemo(() => {
@@ -496,11 +557,13 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
       list = list.filter(c => odts.some(o => o.clientId === c.id && isOdtCarryOver(o)));
     } else if (selectedOdtCardFilter === 'published') {
       list = list.filter(c => odts.some(o => o.clientId === c.id && isOdtPublished(o)));
+    } else if (selectedOdtCardFilter === 'to_publish') {
+      list = list.filter(c => odts.some(o => o.clientId === c.id && isOdtToPublishInPeriod(o)));
     } else if (selectedOdtCardFilter === 'created') {
-      list = list.filter(c => odts.some(o => o.clientId === c.id && isOdtInPeriod(o)));
+      list = list.filter(c => odts.some(o => o.clientId === c.id && isOdtCreatedInPeriod(o)));
     }
     return list;
-  }, [myClients, odts, selectedOdtCardFilter, isOdtCarryOver, isOdtPublished, isOdtInPeriod]);
+  }, [myClients, odts, selectedOdtCardFilter, isOdtCarryOver, isOdtPublished, isOdtToPublishInPeriod, isOdtCreatedInPeriod]);
 
   // Métricas del Nivel 3 (Parrilla activa - 8 Bloques Operativos)
   const level3Metrics = useMemo(() => {
@@ -714,9 +777,9 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-4 py-3 rounded-2xl border border-slate-200/80 shadow-2xs">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-2.5 h-2.5 rounded-full bg-pink-500 animate-pulse" />
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                <span>Avance de Entrega según Estatus Operativo</span>
+                <span>Panel de Datos de los Posts — {activeOdt.numeroODT}: {activeOdt.nombreParrilla}</span>
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                   {level3Metrics.total} posts en esta parrilla
                 </span>
@@ -837,7 +900,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-            {/* Tarjeta 1: Parrillas Creadas */}
+            {/* Tarjeta 1: ODTs Creadas en el Mes Corriente */}
             <div 
               onClick={() => setSelectedOdtCardFilter(prev => prev === 'created' ? 'all' : 'created')}
               className={`bg-white rounded-2xl p-4 border transition-all cursor-pointer select-none flex items-center justify-between ${
@@ -847,16 +910,35 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
               }`}
             >
               <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Parrillas del Mes</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">ODTs Creadas</span>
                 <p className="text-2xl font-black text-emerald-700 mt-0.5">{level1And2Metrics.createdCount}</p>
-                <span className="text-[10px] text-slate-500 leading-none block mt-1">Planificadas / creadas en {activePeriodName}</span>
+                <span className="text-[10px] text-slate-500 leading-none block mt-1">Creadas en {activePeriodName}</span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0">
                 <Layers className="w-5 h-5" />
               </div>
             </div>
 
-            {/* Tarjeta 2: Parrillas Publicadas */}
+            {/* Tarjeta 2: ODTs/Parrillas por Publicar este Mes */}
+            <div 
+              onClick={() => setSelectedOdtCardFilter(prev => prev === 'to_publish' ? 'all' : 'to_publish')}
+              className={`bg-white rounded-2xl p-4 border transition-all cursor-pointer select-none flex items-center justify-between ${
+                selectedOdtCardFilter === 'to_publish'
+                  ? 'ring-2 ring-sky-500 border-sky-300 bg-sky-50/20 shadow-xs scale-[1.02]'
+                  : 'border-slate-200 hover:border-sky-300 hover:shadow-xs'
+              }`}
+            >
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-sky-700">Por Publicar</span>
+                <p className="text-2xl font-black text-sky-700 mt-0.5">{level1And2Metrics.toPublishCount}</p>
+                <span className="text-[10px] text-slate-500 leading-none block mt-1">Compromiso en {activePeriodName}</span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold shrink-0">
+                <Calendar className="w-5 h-5" />
+              </div>
+            </div>
+
+            {/* Tarjeta 3: Parrillas ya Publicadas */}
             <div 
               onClick={() => setSelectedOdtCardFilter(prev => prev === 'published' ? 'all' : 'published')}
               className={`bg-white rounded-2xl p-4 border transition-all cursor-pointer select-none flex items-center justify-between ${
@@ -875,13 +957,13 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
               </div>
             </div>
 
-            {/* Tarjeta 3: % Eficiencia del Cliente */}
+            {/* Tarjeta 4: % Eficiencia de Entrega */}
             <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs flex flex-col justify-between">
               <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Eficiencia Cliente</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Eficiencia % Entrega</span>
                 <div className="flex items-baseline gap-2 mt-0.5">
                   <span className="text-2xl font-black text-slate-900">{level1And2Metrics.efficiencyPct}%</span>
-                  <span className="text-[10px] text-slate-500">tasa de entrega</span>
+                  <span className="text-[10px] text-slate-500">cumplimiento</span>
                 </div>
               </div>
               <div className="mt-2">
@@ -892,12 +974,12 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                   />
                 </div>
                 <span className="text-[10px] text-slate-400 mt-1 block">
-                  {level1And2Metrics.publishedCount} de {level1And2Metrics.createdCount} parrillas
+                  {level1And2Metrics.publishedCount} de {level1And2Metrics.toPublishCount} entregadas
                 </span>
               </div>
             </div>
 
-            {/* Tarjeta 4: Parrillas de Arrastre del Cliente (Destacado Rosa/Alerta) */}
+            {/* Tarjeta 5: Arrastre de Mes Anterior (Destacado Rosa/Alerta) */}
             <div 
               onClick={() => setSelectedOdtCardFilter(prev => prev === 'carry_over' ? 'all' : 'carry_over')}
               className={`bg-white rounded-2xl p-4 border transition-all cursor-pointer select-none flex items-center justify-between ${
@@ -910,34 +992,20 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
             >
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700">Arrastre (Meses Previos)</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700">Arrastre Mes Anterior</span>
                   {level1And2Metrics.carryOverCount > 0 && (
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
                   )}
                 </div>
                 <p className="text-2xl font-black text-rose-600 mt-0.5">{level1And2Metrics.carryOverCount}</p>
                 <span className="text-[10px] text-slate-500 leading-none block mt-1">
-                  {level1And2Metrics.carryOverCount > 0 ? '⚠️ No entregadas de meses anteriores' : 'Sin pendientes de meses anteriores'}
+                  {level1And2Metrics.carryOverCount > 0 ? '⚠️ Creadas mes anterior y no terminadas' : 'Sin pendientes de meses anteriores'}
                 </span>
               </div>
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0 ${
                 level1And2Metrics.carryOverCount > 0 ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-600'
               }`}>
                 <AlertTriangle className="w-5 h-5" />
-              </div>
-            </div>
-
-            {/* Tarjeta 5: Volumen de Contenidos */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs flex items-center justify-between">
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Posts</span>
-                <p className="text-2xl font-black text-indigo-600 mt-0.5">{level1And2Metrics.clientPostsCount}</p>
-                <span className="text-[10px] text-slate-500 leading-none block mt-1">
-                  {level1And2Metrics.clientReadyPosts} listos o al aire
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
-                <Sparkles className="w-5 h-5" />
               </div>
             </div>
           </div>
@@ -976,7 +1044,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-            {/* Tarjeta 1: Parrillas Creadas en el Mes */}
+            {/* Tarjeta 1: ODTs Creadas en el Mes Corriente */}
             <div 
               onClick={() => setSelectedOdtCardFilter(prev => prev === 'created' ? 'all' : 'created')}
               className={`bg-white rounded-2xl p-4 border transition-all cursor-pointer select-none flex items-center justify-between ${
@@ -986,16 +1054,35 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
               }`}
             >
               <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Parrillas del Mes</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">ODTs Creadas</span>
                 <p className="text-2xl font-black text-emerald-700 mt-0.5">{level1And2Metrics.createdCount}</p>
-                <span className="text-[10px] text-slate-500 leading-none block mt-1">Planificadas / creadas en {activePeriodName}</span>
+                <span className="text-[10px] text-slate-500 leading-none block mt-1">Dadas de alta en {activePeriodName}</span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0">
                 <Layers className="w-5 h-5" />
               </div>
             </div>
 
-            {/* Tarjeta 2: Parrillas Publicadas en el Mes */}
+            {/* Tarjeta 2: ODTs/Parrillas por Publicar este Mes */}
+            <div 
+              onClick={() => setSelectedOdtCardFilter(prev => prev === 'to_publish' ? 'all' : 'to_publish')}
+              className={`bg-white rounded-2xl p-4 border transition-all cursor-pointer select-none flex items-center justify-between ${
+                selectedOdtCardFilter === 'to_publish'
+                  ? 'ring-2 ring-sky-500 border-sky-300 bg-sky-50/20 shadow-xs scale-[1.02]'
+                  : 'border-slate-200 hover:border-sky-300 hover:shadow-xs'
+              }`}
+            >
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-sky-700">Por Publicar</span>
+                <p className="text-2xl font-black text-sky-700 mt-0.5">{level1And2Metrics.toPublishCount}</p>
+                <span className="text-[10px] text-slate-500 leading-none block mt-1">Compromiso en {activePeriodName}</span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold shrink-0">
+                <Calendar className="w-5 h-5" />
+              </div>
+            </div>
+
+            {/* Tarjeta 3: Parrillas ya Publicadas */}
             <div 
               onClick={() => setSelectedOdtCardFilter(prev => prev === 'published' ? 'all' : 'published')}
               className={`bg-white rounded-2xl p-4 border transition-all cursor-pointer select-none flex items-center justify-between ${
@@ -1014,10 +1101,10 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
               </div>
             </div>
 
-            {/* Tarjeta 3: % Eficiencia Mensual */}
+            {/* Tarjeta 4: % Eficiencia de Entrega */}
             <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs flex flex-col justify-between">
               <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Eficiencia Mensual</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Eficiencia % Entrega</span>
                 <div className="flex items-baseline gap-2 mt-0.5">
                   <span className="text-2xl font-black text-slate-900">{level1And2Metrics.efficiencyPct}%</span>
                   <span className="text-[10px] text-slate-500">cumplimiento</span>
@@ -1031,12 +1118,12 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                   />
                 </div>
                 <span className="text-[10px] text-slate-400 mt-1 block">
-                  {level1And2Metrics.publishedCount} de {level1And2Metrics.createdCount} completadas
+                  {level1And2Metrics.publishedCount} de {level1And2Metrics.toPublishCount} entregadas
                 </span>
               </div>
             </div>
 
-            {/* Tarjeta 4: Parrillas de Arrastre de Meses Anteriores (Destacado Rosa/Alerta) */}
+            {/* Tarjeta 5: Arrastre de Mes Anterior (Destacado Rosa/Alerta) */}
             <div 
               onClick={() => setSelectedOdtCardFilter(prev => prev === 'carry_over' ? 'all' : 'carry_over')}
               className={`bg-white rounded-2xl p-4 border transition-all cursor-pointer select-none flex items-center justify-between ${
@@ -1049,38 +1136,20 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
             >
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700">Arrastre (Meses Previos)</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-700">Arrastre Mes Anterior</span>
                   {level1And2Metrics.carryOverCount > 0 && (
                     <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
                   )}
                 </div>
                 <p className="text-2xl font-black text-rose-600 mt-0.5">{level1And2Metrics.carryOverCount}</p>
                 <span className="text-[10px] text-slate-500 leading-none block mt-1">
-                  {level1And2Metrics.carryOverCount > 0 ? '⚠️ No entregadas de meses anteriores' : 'Sin pendientes de meses anteriores'}
+                  {level1And2Metrics.carryOverCount > 0 ? '⚠️ Creadas mes anterior y no terminadas' : 'Sin pendientes de meses anteriores'}
                 </span>
               </div>
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0 ${
                 level1And2Metrics.carryOverCount > 0 ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-600'
               }`}>
                 <AlertTriangle className="w-5 h-5" />
-              </div>
-            </div>
-
-            {/* Tarjeta 5: Salud de Cartera de Clientes */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs flex items-center justify-between">
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Salud Cartera</span>
-                <p className="text-2xl font-black text-slate-900 mt-0.5">
-                  {level1And2Metrics.clientsOnTrack} <span className="text-sm font-semibold text-slate-400">/ {myClients.length}</span>
-                </p>
-                <span className="text-[10px] text-slate-500 leading-none block mt-1">
-                  {level1And2Metrics.clientsWithOverdue > 0 
-                    ? `${level1And2Metrics.clientsWithOverdue} clientes con arrastre` 
-                    : '100% de clientes al día'}
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold shrink-0">
-                <Building2 className="w-5 h-5" />
               </div>
             </div>
           </div>
@@ -1390,13 +1459,6 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
               )}
             </div>
           )}
-
-          {/* EMBUDO / MAPA DE ETAPAS DE LA PARRILLA */}
-          <OdtPipelineFunnel
-            posts={activeOdtPosts}
-            selectedStageId={selectedFunnelStage}
-            onSelectStage={setSelectedFunnelStage}
-          />
 
           {/* LISTA Y TABLA DE POSTS */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
