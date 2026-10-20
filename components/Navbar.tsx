@@ -149,12 +149,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </div>
               <div className="text-left">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-xs font-bold text-slate-800 leading-none">{currentUser.name}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-md border font-semibold flex items-center gap-1 ${getRoleBadgeStyle(currentUser.role)}`}>
                     {getRoleIcon(currentUser.role)}
                     {currentUser.role}
                   </span>
+                  {currentUser.secondaryRoles && currentUser.secondaryRoles.map(sr => (
+                    <span key={sr} className="text-[10px] px-1.5 py-0.5 rounded-md border font-bold flex items-center gap-0.5 bg-purple-50 text-purple-700 border-purple-200" title={`Perfil Compartido: ${sr}`}>
+                      <span>+{sr}</span>
+                    </span>
+                  ))}
                 </div>
                 {currentUser.role === 'Cliente' && clientName ? (
                   <span className="text-[11px] text-cyan-700 font-medium">{clientName}</span>

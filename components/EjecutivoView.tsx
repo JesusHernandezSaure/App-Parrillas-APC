@@ -4,7 +4,7 @@ import {
   Building2, Layers, Folder, FolderOpen, Plus, ChevronRight, CheckCircle2, 
   Clock, AlertTriangle, ShieldCheck, ExternalLink, ShieldAlert, Send, 
   Search, Filter, Sparkles, UserCheck, Calendar, ArrowRight, TrendingUp, AlertCircle,
-  Copy, RefreshCw, X, Share2, Globe, Edit3, CheckSquare, Palette, Video, FileText
+  Copy, RefreshCw, X, Share2, Globe, Edit3, CheckSquare, Palette, Video, FileText, Trash2
 } from 'lucide-react';
 import { 
   PostStageMap, MACRO_STAGES, getMacroStageForStatus, 
@@ -150,7 +150,7 @@ interface EjecutivoViewProps {
   currentUser: User;
   onOpenCreateOdt: (clientId?: string) => void;
   onOpenCreatePost: (odt: ODT) => void;
-  onSelectPost: (post: Post) => void;
+  onSelectPost: (post: Post, startEditing?: boolean) => void;
   onOpenIntervention: (post: Post) => void;
   onSendToClientApproval: (post: Post, odt: ODT) => void;
   onOpenApprovalModal?: (post: Post, type: 'aprobacion_interna_final' | 'esperando_ejecutivo') => void;
@@ -158,6 +158,8 @@ interface EjecutivoViewProps {
   onOpenPublishModal?: (post: Post) => void;
   onDuplicatePost?: (post: Post, newRedSocial: string) => void;
   onRecyclePost?: (post: Post) => void;
+  onDeletePost?: (postId: string) => void;
+  onUpdatePost?: (postId: string, data: Partial<Post>) => void;
   canCreateOdt?: boolean;
   selectedClientId?: string;
   selectedOdtId?: string;
@@ -180,6 +182,8 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
   onOpenPublishModal,
   onDuplicatePost,
   onRecyclePost,
+  onDeletePost,
+  onUpdatePost,
   canCreateOdt,
   selectedClientId,
   selectedOdtId,
@@ -199,6 +203,16 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
   const [selectedLevel3Stage, setSelectedLevel3Stage] = useState<Level3StageKey>('all');
 
   const isOdtCreator = canCreateOdt !== false && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin');
+
+  // Permisos para edición de nombre, copys y eliminación de posts
+  const isClient = currentUser.role === 'Cliente';
+  const hasEditPermission = Boolean(currentUser.permissions?.canEditAnyPost);
+  const hasDeletePermission = Boolean(currentUser.permissions?.canDeletePost);
+  const isSuperAdminOrAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'Admin';
+  const isEjecutivoOrCommunity = currentUser.role === 'Ejecutivo' || currentUser.role === 'Community';
+
+  const canEdit = !isClient && (isSuperAdminOrAdmin || isEjecutivoOrCommunity || hasEditPermission);
+  const canDelete = !isClient && (isSuperAdminOrAdmin || isEjecutivoOrCommunity || hasDeletePermission);
 
   // Clientes asignados a este ejecutivo (o todos si es Admin, Super Admin o Community)
   const myClients = useMemo(() => {
@@ -1582,9 +1596,21 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                       {/* Fila Superior: Metadatos y Botones de Acción */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded-md bg-slate-900 text-white font-mono text-xs font-bold">
-                            {post.numeroInterno}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-900 text-white font-mono text-xs font-bold shadow-2xs">
+                              {post.numeroInterno}
+                            </span>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => onSelectPost(post, true)}
+                                className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors cursor-pointer"
+                                title="Editar nombre del post"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                           <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold">
                             {post.redSocial}
                           </span>
@@ -1738,6 +1764,34 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                             >
                               <ShieldAlert className="w-4 h-4 text-indigo-500" />
                               <span className="hidden sm:inline">Intervenir</span>
+                            </button>
+                          )}
+
+                          {/* Editar posts */}
+                          {canEdit && (
+                            <button
+                              onClick={() => onSelectPost(post, true)}
+                              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                              title="Editar nombre, copy y especificaciones del post"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Editar posts</span>
+                            </button>
+                          )}
+
+                          {/* Eliminar Posts */}
+                          {canDelete && onDeletePost && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`¿Estás seguro de que deseas eliminar permanentemente el post "${post.numeroInterno}" (${post.redSocial})?\n\nEsta acción no se puede deshacer.`)) {
+                                  onDeletePost(post.id);
+                                }
+                              }}
+                              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                              title="Eliminar este post de la parrilla"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              <span className="hidden sm:inline">Eliminar Posts</span>
                             </button>
                           )}
 

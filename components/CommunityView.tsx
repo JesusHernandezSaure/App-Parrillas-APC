@@ -3,7 +3,7 @@ import { Post, ODT, Client, User } from '../types';
 import { 
   Sparkles, CheckCircle2, Clock, Globe, Plus, Send, ExternalLink, 
   Layers, Info, ShieldAlert, ShieldCheck, AlertTriangle, Edit3,
-  Copy, RefreshCw, X, Calendar, Share2, UserCheck
+  Copy, RefreshCw, X, Calendar, Share2, UserCheck, Trash2
 } from 'lucide-react';
 import { EjecutivoView } from './EjecutivoView';
 import { RichTextDisplay } from './RichTextDisplay';
@@ -28,6 +28,7 @@ interface CommunityViewProps {
   onUpdatePost?: (postId: string, data: { copyIn?: string; copyOut?: string; enlaceReferencia?: string; enlaceMaterialFinal?: string }) => void;
   onDuplicatePost?: (post: Post, newRedSocial: string) => void;
   onRecyclePost?: (post: Post) => void;
+  onDeletePost?: (postId: string) => void;
 }
 
 export const CommunityView: React.FC<CommunityViewProps> = ({
@@ -48,7 +49,8 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   onOpenApprovalModal,
   onUpdatePost,
   onDuplicatePost,
-  onRecyclePost
+  onRecyclePost,
+  onDeletePost
 }) => {
   // Por defecto abrimos la vista de gestión integral de Parrillas & Posts solicitada
   const [activeTab, setActiveTab] = useState<'parrillas' | 'todo' | 'ready_to_publish' | 'published'>('parrillas');
@@ -294,6 +296,8 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             onOpenPublishModal={onOpenPublishModal}
             onDuplicatePost={onDuplicatePost}
             onRecyclePost={onRecyclePost}
+            onDeletePost={onDeletePost}
+            onUpdatePost={onUpdatePost}
           />
         </div>
       )}
@@ -385,7 +389,31 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                     </div>
 
                     {/* Botones principales */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <button
+                        onClick={() => onSelectPost(post, true)}
+                        className="px-3 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        title="Editar nombre y contenido del post"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Editar posts</span>
+                      </button>
+
+                      {onDeletePost && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`¿Estás seguro de que deseas eliminar permanentemente el post "${post.numeroInterno}" (${post.redSocial})?\n\nEsta acción quitará la publicación de la parrilla y no se puede deshacer.`)) {
+                              onDeletePost(post.id);
+                            }
+                          }}
+                          className="px-2.5 py-2 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="Eliminar este post"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span className="hidden sm:inline">Eliminar Posts</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => onSelectPost(post)}
                         className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
@@ -554,11 +582,26 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                         <button
                           onClick={() => onSelectPost(post, true)}
                           className="px-3.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                          title="Abrir editor para modificar Copy In y Copy Out"
+                          title="Abrir editor para modificar nombre, copys y especificaciones"
                         >
                           <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>Ver / Editar</span>
+                          <span>Editar posts</span>
                         </button>
+
+                        {onDeletePost && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`¿Estás seguro de que deseas eliminar permanentemente el post "${post.numeroInterno}" (${post.redSocial})?\n\nEsta acción quitará la publicación de la parrilla y no se puede deshacer.`)) {
+                                onDeletePost(post.id);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                            title="Eliminar este post permanentemente de la parrilla"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Eliminar Posts</span>
+                          </button>
+                        )}
                         {odt && (
                           <button
                             onClick={() => onSendToReview(post, odt)}
@@ -663,7 +706,33 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       <span className="text-xs text-slate-400 italic">No se han registrado enlaces web aún</span>
                     )}
 
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-50">
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-50 flex-wrap">
+                      <button
+                        onClick={() => onSelectPost(post, true)}
+                        className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 hover:underline cursor-pointer"
+                        title="Editar nombre y especificaciones del post"
+                      >
+                        <Edit3 className="w-3 h-3 text-indigo-600" />
+                        <span>Editar posts</span>
+                      </button>
+                      {onDeletePost && (
+                        <>
+                          <span className="text-slate-300 text-xs">•</span>
+                          <button
+                            onClick={() => {
+                              if (confirm(`¿Estás seguro de que deseas eliminar permanentemente el post "${post.numeroInterno}" (${post.redSocial})?\n\nEsta acción quitará la publicación de la parrilla y no se puede deshacer.`)) {
+                                onDeletePost(post.id);
+                              }
+                            }}
+                            className="text-[11px] font-bold text-rose-600 hover:text-rose-800 flex items-center gap-1 hover:underline cursor-pointer"
+                            title="Eliminar este post"
+                          >
+                            <Trash2 className="w-3 h-3 text-rose-600" />
+                            <span>Eliminar Posts</span>
+                          </button>
+                        </>
+                      )}
+                      <span className="text-slate-300 text-xs">•</span>
                       <button
                         onClick={() => onSelectPost(post)}
                         className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 hover:underline"

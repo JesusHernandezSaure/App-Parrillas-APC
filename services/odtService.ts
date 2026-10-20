@@ -34,7 +34,7 @@ export function getDefaultPermissions(role: UserRole): UserPermissions {
       canDeleteOdt: false,
       canCreatePost: true,
       canEditAnyPost: true,
-      canDeletePost: false,
+      canDeletePost: true,
       canApproveAnyStage: true,
       canBypassWorkflow: true,
       canPublishPost: true,
@@ -50,8 +50,8 @@ export function getDefaultPermissions(role: UserRole): UserPermissions {
       canEditOdt: false,
       canDeleteOdt: false,
       canCreatePost: true,
-      canEditAnyPost: false,
-      canDeletePost: false,
+      canEditAnyPost: true,
+      canDeletePost: true,
       canApproveAnyStage: false,
       canBypassWorkflow: false,
       canPublishPost: true,
@@ -153,14 +153,29 @@ export function getStoredUsers(): User[] {
         : (u.clientId ? [u.clientId] : (init?.clientId ? [init.clientId] : []));
       const normalizedClientId = u.clientId || init?.clientId || (normalizedClientIds.length > 0 ? normalizedClientIds[0] : undefined);
 
+      const userSecondaryRoles = (u.secondaryRoles && u.secondaryRoles.length > 0)
+        ? u.secondaryRoles
+        : (init?.secondaryRoles || []);
+
+      // Combinar permisos del rol principal y roles secundarios
+      const mergedSecondaryPerms = (userSecondaryRoles || []).reduce((acc, secRole) => {
+        return { ...acc, ...getDefaultPermissions(secRole) };
+      }, {});
+
       return {
         ...init,
         ...u,
         role,
+        secondaryRoles: userSecondaryRoles,
         isActive: u.isActive !== undefined ? u.isActive : true,
         permissions: isSuper 
           ? FULL_PERMISSIONS 
-          : (u.permissions || getDefaultPermissions(role)),
+          : {
+              ...getDefaultPermissions(role),
+              ...mergedSecondaryPerms,
+              ...(u.permissions || {}),
+              ...((role === 'Community' || role === 'Ejecutivo' || userSecondaryRoles.includes('Community') || userSecondaryRoles.includes('Ejecutivo')) ? { canEditAnyPost: true, canDeletePost: true } : {})
+            },
         clientId: role === 'Cliente' ? normalizedClientId : undefined,
         clientIds: role === 'Cliente' ? normalizedClientIds : undefined,
         phone: u.phone || init?.phone,

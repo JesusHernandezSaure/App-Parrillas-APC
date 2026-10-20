@@ -42,12 +42,12 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
   const [requiereArte, setRequiereArte] = useState(true);
   const [requiereAudioVideo, setRequiereAudioVideo] = useState(true);
 
-  // Responsables
-  const communityUsers = users.filter(u => u.role === 'Community' || u.role === 'Admin');
-  const correctorUsers = users.filter(u => u.role === 'Corrector' || u.role === 'Admin');
-  const medicoUsers = users.filter(u => u.role === 'Médico' || u.role === 'Admin');
-  const arteUsers = users.filter(u => u.role === 'Arte' || u.role === 'Admin');
-  const avUsers = users.filter(u => u.role === 'Audio y Video' || u.role === 'Admin');
+  // Responsables (admite rol principal y roles secundarios/compartidos)
+  const communityUsers = users.filter(u => u.role === 'Community' || u.role === 'Admin' || u.secondaryRoles?.includes('Community'));
+  const correctorUsers = users.filter(u => u.role === 'Corrector' || u.role === 'Admin' || u.secondaryRoles?.includes('Corrector'));
+  const medicoUsers = users.filter(u => u.role === 'Médico' || u.role === 'Admin' || u.secondaryRoles?.includes('Médico'));
+  const arteUsers = users.filter(u => u.role === 'Arte' || u.role === 'Admin' || u.secondaryRoles?.includes('Arte'));
+  const avUsers = users.filter(u => u.role === 'Audio y Video' || u.role === 'Admin' || u.secondaryRoles?.includes('Audio y Video'));
 
   const [communityId, setCommunityId] = useState(communityUsers[0]?.id || '');
   const [correctorId, setCorrectorId] = useState(correctorUsers[0]?.id || '');

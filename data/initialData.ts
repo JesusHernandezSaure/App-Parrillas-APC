@@ -106,7 +106,8 @@ export const INITIAL_USERS: User[] = [
     username: 'ania.jaime', 
     name: 'Ania Jaime', 
     role: 'Arte', 
-    cargo: 'Digital Producer',
+    secondaryRoles: ['Audio y Video'],
+    cargo: 'Digital Producer & Arte / Video',
     email: 'ania.jaime@apcpublicidad.com',
     phone: '5548819611',
     whatsapp: '5548819611',
@@ -158,7 +159,22 @@ export const INITIAL_USERS: User[] = [
     cargo: 'Community Manager',
     email: 'bere@apcpublicidad.com',
     password: '123',
-    isActive: true
+    isActive: true,
+    permissions: {
+      canCreateOdt: false,
+      canEditOdt: false,
+      canDeleteOdt: false,
+      canCreatePost: true,
+      canEditAnyPost: true,
+      canDeletePost: true,
+      canApproveAnyStage: false,
+      canBypassWorkflow: false,
+      canPublishPost: true,
+      canManageUsers: false,
+      canManageClients: false,
+      canViewInternalComments: true,
+      canSuperviseAll: false,
+    }
   },
   { 
     id: 'u5', 

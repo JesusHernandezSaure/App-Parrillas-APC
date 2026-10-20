@@ -30,6 +30,7 @@ export interface User {
   username: string;
   name: string;
   role: UserRole;
+  secondaryRoles?: UserRole[]; // Roles adicionales o perfiles compartidos (ej. Arte + Audio y Video)
   clientId?: string; // Solo para usuarios con rol 'Cliente' (marca principal de compatibilidad)
   clientIds?: string[]; // Múltiples marcas/clientes autorizados para este usuario
   email?: string;

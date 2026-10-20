@@ -44,6 +44,10 @@ export const App: React.FC = () => {
           if (loadedUsers.length > 0 && isSubscribed) {
             setUsers(loadedUsers);
             saveStoredUsers(loadedUsers);
+            setCurrentUser(prev => {
+              const matched = loadedUsers.find(u => u.id === prev.id);
+              return matched ? { ...prev, ...matched } : prev;
+            });
           }
         });
 
@@ -520,10 +524,11 @@ export const App: React.FC = () => {
     setIsCreatePostOpen(false);
   };
 
-  // 2.1 Actualizar contenido y especificaciones de un post (Copy In, Copy Out, Enlaces, Fechas, Medidas, Prioridad)
+  // 2.1 Actualizar contenido y especificaciones de un post (Nombre / Número, Copy In, Copy Out, Enlaces, Fechas, Medidas, Prioridad)
   const handleUpdatePostContent = (
     postId: string,
     data: {
+      numeroInterno?: string;
       copyIn?: string;
       copyOut?: string;
       enlaceReferencia?: string;
@@ -543,11 +548,12 @@ export const App: React.FC = () => {
       const historyEntry = createIntervention(
         currentUser,
         'Actualización de Ficha y Copys',
-        `Textos y especificaciones técnicas editados y guardados por ${currentUser.name} (${currentUser.role}).`,
+        `Ficha y especificaciones editadas por ${currentUser.name} (${currentUser.role}).${data.numeroInterno && data.numeroInterno !== p.numeroInterno ? ` Nombre cambiado a "${data.numeroInterno}".` : ''}`,
         p.estado
       );
       return {
         ...p,
+        numeroInterno: (data.numeroInterno !== undefined && data.numeroInterno.trim()) ? data.numeroInterno.trim() : p.numeroInterno,
         copyIn: data.copyIn !== undefined ? data.copyIn : p.copyIn,
         copyOut: data.copyOut !== undefined ? data.copyOut : p.copyOut,
         enlaceReferencia: data.enlaceReferencia !== undefined ? data.enlaceReferencia : p.enlaceReferencia,
@@ -1652,8 +1658,9 @@ export const App: React.FC = () => {
               setCreatePostOdt(odt);
               setIsCreatePostOpen(true);
             }}
-            onSelectPost={(post) => {
+            onSelectPost={(post, startEditing?: boolean) => {
               setActiveModalPost(post);
+              setDetailInitialEditMode(Boolean(startEditing));
               setIsDetailOpen(true);
             }}
             onOpenIntervention={(post) => {
@@ -1673,6 +1680,8 @@ export const App: React.FC = () => {
             }}
             onDuplicatePost={handleDuplicatePost}
             onRecyclePost={handleRecyclePost}
+            onDeletePost={handleDeletePost}
+            onUpdatePost={handleUpdatePostContent}
           />
         )}
 
@@ -1697,6 +1706,7 @@ export const App: React.FC = () => {
               setIsDetailOpen(true);
             }}
             onUpdatePost={handleUpdatePostContent}
+            onDeletePost={handleDeletePost}
             onSendToReview={handleSendToReview}
             onDuplicatePost={handleDuplicatePost}
             onRecyclePost={handleRecyclePost}
@@ -1808,6 +1818,7 @@ export const App: React.FC = () => {
           }}
           onAddComment={handleAddComment}
           onUpdatePost={handleUpdatePostContent}
+          onDeletePost={handleDeletePost}
           onSendToReview={handleSendToReview}
           onDuplicatePost={handleDuplicatePost}
           onRecyclePost={handleRecyclePost}

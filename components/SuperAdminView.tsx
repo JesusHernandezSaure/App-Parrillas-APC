@@ -145,6 +145,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         : (userToEdit.clientId ? [userToEdit.clientId] : []);
       setUserFormData({
         ...userToEdit,
+        secondaryRoles: userToEdit.secondaryRoles ? [...userToEdit.secondaryRoles] : [],
         clientIds: initialClientIds,
         clientId: userToEdit.clientId || (initialClientIds.length > 0 ? initialClientIds[0] : undefined)
       });
@@ -158,6 +159,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         name: '',
         username: '',
         role: defaultRole,
+        secondaryRoles: [],
         email: '',
         phone: '',
         cargo: '',
@@ -222,6 +224,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
       name: userFormData.name.trim(),
       username: userFormData.username.trim(),
       role: (userFormData.role as UserRole) || 'Community',
+      secondaryRoles: (userFormData.secondaryRoles || []).filter(r => r !== userFormData.role),
       clientId: primaryClientId,
       clientIds: selectedClientIds,
       email: userFormData.email?.trim() || undefined,
@@ -529,16 +532,23 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
                         <td className="py-3.5 px-4">
                           <div className="space-y-1">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                              isSuper 
-                                ? 'bg-amber-100 text-amber-900 border-amber-300' 
-                                : u.role === 'Cliente'
-                                ? 'bg-cyan-50 text-cyan-800 border-cyan-200'
-                                : 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                            }`}>
-                              {isSuper && <Crown className="w-3 h-3 text-amber-600 fill-amber-500" />}
-                              {u.role}
-                            </span>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                                isSuper 
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300' 
+                                  : u.role === 'Cliente'
+                                  ? 'bg-cyan-50 text-cyan-800 border-cyan-200'
+                                  : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                              }`}>
+                                {isSuper && <Crown className="w-3 h-3 text-amber-600 fill-amber-500" />}
+                                {u.role}
+                              </span>
+                              {u.secondaryRoles && u.secondaryRoles.map(sr => (
+                                <span key={sr} className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200" title={`Perfil Compartido: ${sr}`}>
+                                  +{sr}
+                                </span>
+                              ))}
+                            </div>
                             
                             <div className="flex flex-wrap gap-1 max-w-xs">
                               {perms.canCreateOdt && <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded">ODTs</span>}
@@ -1206,6 +1216,69 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                     </select>
                   </div>
 
+                  {/* Sección de Perfiles Compartidos / Roles Adicionales */}
+                  {userFormData.role !== 'Cliente' && userFormData.role !== 'Super Admin' && (
+                    <div className="sm:col-span-2 p-3.5 bg-amber-50/70 border border-amber-300 rounded-xl space-y-2.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-amber-600" />
+                          <span className="text-xs font-bold text-slate-800">
+                            Perfiles Compartidos / Especialidades Adicionales
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-amber-800 font-semibold bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                          Multi-Especialidad
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+                        Activa otros roles que este colaborador también pueda desempeñar. Por ejemplo: si un diseñador realiza <strong>Arte</strong> y también <strong>Audio y Video</strong>, podrá gestionar ambas listas de pendientes en su taller mediante bandejas separadas para no mezclar trabajos.
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                        {[
+                          { id: 'Arte' as UserRole, label: '🎨 Arte / Diseño Gráfico', desc: 'Piezas estáticas, gráficas y editables' },
+                          { id: 'Audio y Video' as UserRole, label: '🎬 Audio y Video', desc: 'Edición de video, reels y animación' },
+                          { id: 'Community' as UserRole, label: '📱 Community Manager', desc: 'Redacción y gestión de copys' },
+                          { id: 'Ejecutivo' as UserRole, label: '💼 Ejecutivo de Cuentas', desc: 'Gestión de ODTs y marcas' },
+                          { id: 'Corrector' as UserRole, label: '✍️ Corrector / QA', desc: 'Revisión ortotipográfica' },
+                          { id: 'Médico' as UserRole, label: '🩺 Médico Revisor', desc: 'Validación médica y claims' }
+                        ]
+                          .filter(item => item.id !== userFormData.role)
+                          .map(item => {
+                            const isChecked = (userFormData.secondaryRoles || []).includes(item.id);
+                            return (
+                              <label 
+                                key={item.id}
+                                className={`flex items-start gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                                  isChecked 
+                                    ? 'bg-white border-amber-500 shadow-2xs ring-1 ring-amber-400' 
+                                    : 'bg-white/60 border-slate-200 hover:bg-white hover:border-slate-300 text-slate-700'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    const current = userFormData.secondaryRoles || [];
+                                    const next = checked 
+                                      ? [...current, item.id]
+                                      : current.filter(r => r !== item.id);
+                                    setUserFormData(prev => ({ ...prev, secondaryRoles: next }));
+                                  }}
+                                  className="mt-0.5 rounded text-amber-600 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer"
+                                />
+                                <div className="min-w-0">
+                                  <span className="font-bold block text-slate-900 leading-tight">{item.label}</span>
+                                  <span className="text-[10px] text-slate-500 block truncate">{item.desc}</span>
+                                </div>
+                              </label>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
                   {userFormData.role === 'Cliente' && (
                     <div className="bg-cyan-50/70 border-2 border-cyan-300 rounded-xl p-4 space-y-3.5 shadow-xs">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-cyan-200 pb-2.5">
@@ -1553,8 +1626,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                       className="rounded text-amber-500 focus:ring-amber-500"
                     />
                     <div>
-                      <div className="font-bold text-slate-800">Editar Cualquier Post</div>
-                      <div className="text-[10px] text-slate-500">Modificar copys y enlaces en cualquier fase</div>
+                      <div className="font-bold text-slate-800">Editar posts</div>
+                      <div className="text-[10px] text-slate-500">Modificar nombre, copys y especificaciones en cualquier etapa</div>
                     </div>
                   </label>
 
@@ -1566,8 +1639,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                       className="rounded text-amber-500 focus:ring-amber-500"
                     />
                     <div>
-                      <div className="font-bold text-slate-800">Eliminar / Cancelar Posts</div>
-                      <div className="text-[10px] text-slate-500">Remover publicaciones de una parrilla</div>
+                      <div className="font-bold text-slate-800">Eliminar Posts</div>
+                      <div className="text-[10px] text-slate-500">Remover y borrar publicaciones de una parrilla</div>
                     </div>
                   </label>
 

@@ -3,7 +3,7 @@ import { Post, ODT, User, PostComment, MaterialType, PostDimensions, PriorityLev
 import { 
   X, CheckCircle2, Clock, AlertTriangle, ExternalLink, ShieldCheck, 
   MessageSquare, Send, History, ArrowRight, UserCircle2, Eye, EyeOff,
-  Edit3, Save, Check, Copy, RefreshCw, Calendar, Sparkles, Globe, Share2
+  Edit3, Save, Check, Copy, RefreshCw, Calendar, Sparkles, Globe, Share2, Trash2
 } from 'lucide-react';
 import { getNowTimestamp } from '../services/odtService';
 import { PostStageMap } from './PostPipelineTracker';
@@ -18,6 +18,7 @@ interface PostDetailModalProps {
   onAddComment: (commentText: string, isClientVisible: boolean) => void;
   onOpenIntervention?: () => void;
   onUpdatePost?: (postId: string, data: { 
+    numeroInterno?: string;
     copyIn?: string; 
     copyOut?: string; 
     enlaceReferencia?: string; 
@@ -31,6 +32,7 @@ interface PostDetailModalProps {
     enlaceEditableArte?: string;
     notasArteParaVideo?: string;
   }) => void;
+  onDeletePost?: (postId: string) => void;
   onSendToReview?: (post: Post, odt: ODT) => void;
   onDuplicatePost?: (post: Post, newRedSocial: string) => void;
   onRecyclePost?: (post: Post) => void;
@@ -55,6 +57,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   onAddComment,
   onOpenIntervention,
   onUpdatePost,
+  onDeletePost,
   onSendToReview,
   onDuplicatePost,
   onRecyclePost,
@@ -75,7 +78,17 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   };
 
   const isClient = currentUser.role === 'Cliente';
-  const canEdit = !isClient;
+  const hasEditPermission = Boolean(currentUser.permissions?.canEditAnyPost);
+  const hasDeletePermission = Boolean(currentUser.permissions?.canDeletePost);
+  const isSuperAdminOrAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'Admin';
+  const isEjecutivoOrCommunity = currentUser.role === 'Ejecutivo' || currentUser.role === 'Community';
+
+  // Puede editar si tiene permiso canEditAnyPost, es Admin/SuperAdmin, o es Ejecutivo/Community con permiso de edición
+  const canEdit = !isClient && (isSuperAdminOrAdmin || isEjecutivoOrCommunity || hasEditPermission);
+
+  // Puede eliminar si tiene permiso canDeletePost activado, es Admin/SuperAdmin, o es Ejecutivo/Community
+  const canDelete = !isClient && (isSuperAdminOrAdmin || isEjecutivoOrCommunity || hasDeletePermission);
+
   const visibleComments = isClient ? post.comentarios.filter(c => c.isClientVisible) : post.comentarios;
 
   // Estado para modal emergente de duplicación
@@ -92,6 +105,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     return post.estado === 'Ajustes de Copy' || post.estado === 'En Community' || post.estado === 'Borrador' || post.estado === 'Cambios solicitados por Cliente';
   });
 
+  const [editNumeroInterno, setEditNumeroInterno] = useState(post.numeroInterno || '');
   const [editCopyIn, setEditCopyIn] = useState(post.copyIn || '');
   const [editCopyOut, setEditCopyOut] = useState(post.copyOut || '');
   const [editEnlaceReferencia, setEditEnlaceReferencia] = useState(post.enlaceReferencia || '');
@@ -107,6 +121,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
+    setEditNumeroInterno(post.numeroInterno || '');
     setEditCopyIn(post.copyIn || '');
     setEditCopyOut(post.copyOut || '');
     setEditEnlaceReferencia(post.enlaceReferencia || '');
@@ -127,9 +142,24 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     }
   }, [initialEditMode]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isDuplicateDialogOpen) {
+          setIsDuplicateDialogOpen(false);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, isDuplicateDialogOpen]);
+
   const handleSavePostEdits = () => {
     if (onUpdatePost) {
       onUpdatePost(post.id, {
+        numeroInterno: editNumeroInterno.trim() || post.numeroInterno,
         copyIn: editCopyIn.trim(),
         copyOut: editCopyOut.trim(),
         enlaceReferencia: editEnlaceReferencia.trim(),
@@ -150,8 +180,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   };
 
   const handleSaveAndSendToReview = () => {
+    const finalName = editNumeroInterno.trim() || post.numeroInterno;
     if (onUpdatePost) {
       onUpdatePost(post.id, {
+        numeroInterno: finalName,
         copyIn: editCopyIn.trim(),
         copyOut: editCopyOut.trim(),
         enlaceReferencia: editEnlaceReferencia.trim(),
@@ -169,6 +201,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     if (odt && onSendToReview) {
       const updatedPost: Post = {
         ...post,
+        numeroInterno: finalName,
         copyIn: editCopyIn.trim(),
         copyOut: editCopyOut.trim(),
         enlaceReferencia: editEnlaceReferencia.trim(),
@@ -254,85 +287,134 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
-        
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-          <div className="flex items-center gap-3">
-            <span className="px-2.5 py-1 rounded-lg bg-slate-900 text-white font-mono text-sm font-bold shadow-xs">
-              {post.numeroInterno}
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">{post.redSocial}</h2>
-                <span className={`text-xs px-2.5 py-0.5 rounded-full border font-semibold ${getStatusBadge(post.estado)}`}>
-                  {post.estado}
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-6 pt-14 sm:pt-14 overflow-y-auto"
+      onClick={onClose}
+    >
+      {/* Contenedor relativo para alojar el botón Cerrar afuera del modal */}
+      <div 
+        className="relative max-w-4xl w-full my-auto animate-in fade-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Botón flotante exterior de Cerrar */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute -top-11 right-0 sm:right-1 z-30 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900 hover:bg-black text-white text-xs font-bold border border-slate-700/80 shadow-2xl transition-all hover:scale-105 cursor-pointer backdrop-blur-xs"
+          title="Cerrar ventana (Esc o clic afuera)"
+        >
+          <X className="w-4 h-4 text-slate-300" />
+          <span>Cerrar</span>
+        </button>
+
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-h-[88vh] flex flex-col overflow-hidden border border-slate-200">
+          
+          {/* Header */}
+          <div className="px-5 sm:px-6 py-3.5 border-b border-slate-100 bg-slate-50/80">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Información e Identificación del Post */}
+              <div className="flex items-center gap-3 min-w-0">
+                <span 
+                  className="px-2.5 py-1 rounded-lg bg-slate-900 text-white font-mono text-sm font-bold shadow-xs shrink-0"
+                  title="Identificador del Post"
+                >
+                  {editNumeroInterno || post.numeroInterno}
                 </span>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-bold text-slate-900 leading-tight">{post.redSocial}</h2>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full border font-semibold ${getStatusBadge(post.estado)}`}>
+                      {post.estado}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                    Previsto: {post.fechaPrevista || 'Sin fecha'} • Formato: {post.tipoMaterial}
+                    {!isClient && ` • Resp: ${post.areaResponsable} (${post.responsableActualName || 'Sin asignar'})`}
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-slate-500">
-                Previsto: {post.fechaPrevista} • Formato: {post.tipoMaterial}
-                {!isClient && ` • Resp: ${post.areaResponsable} (${post.responsableActualName || 'Sin asignar'})`}
-              </p>
+
+              {/* Barra de Acciones del Post */}
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:justify-end shrink-0">
+                {/* Botón Editar posts (Modo edición) */}
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('content');
+                      setIsEditing(!isEditing);
+                    }}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
+                      isEditing 
+                        ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200 ring-2 ring-amber-400/30' 
+                        : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                    }`}
+                    title={isEditing ? 'Salir del modo edición' : 'Modificar nombre, textos y especificaciones del post'}
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>{isEditing ? 'Modo Edición Activo' : 'Editar posts'}</span>
+                  </button>
+                )}
+
+                {/* Botón Duplicar */}
+                {canEdit && onDuplicatePost && (
+                  <button
+                    type="button"
+                    onClick={() => setIsDuplicateDialogOpen(true)}
+                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
+                    title="Duplicar post para otra red social"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="hidden md:inline">Duplicar</span>
+                  </button>
+                )}
+
+                {/* Botón Reciclar */}
+                {canEdit && onRecyclePost && post.estado !== 'Borrador' && (
+                  <button
+                    type="button"
+                    onClick={handleTriggerRecycle}
+                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
+                    title="Atraer post al inicio (Borrador) para nuevo enfoque"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+                    <span className="hidden md:inline">Reciclar</span>
+                  </button>
+                )}
+
+                {/* Botón Intervenir Supervisor */}
+                {!isClient && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && onOpenIntervention && (
+                  <button
+                    type="button"
+                    onClick={onOpenIntervention}
+                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer shrink-0"
+                    title="Intervención manual de supervisor"
+                  >
+                    Intervenir
+                  </button>
+                )}
+
+                {/* Botón Eliminar Posts */}
+                {canDelete && onDeletePost && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`¿Estás seguro de que deseas eliminar permanentemente el post "${post.numeroInterno}" (${post.redSocial})?\n\nEsta acción quitará la publicación de la parrilla y no se puede deshacer.`)) {
+                        onDeletePost(post.id);
+                        onClose();
+                      }
+                    }}
+                    className="text-xs font-bold px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
+                    title="Eliminar este post permanentemente de la parrilla"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Eliminar Posts</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            {canEdit && onDuplicatePost && (
-              <button
-                onClick={() => setIsDuplicateDialogOpen(true)}
-                className="text-xs font-bold px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                title="Duplicar post para otra red social"
-              >
-                <Copy className="w-3.5 h-3.5 text-slate-500" />
-                <span className="hidden sm:inline">Duplicar</span>
-              </button>
-            )}
-
-            {canEdit && onRecyclePost && post.estado !== 'Borrador' && (
-              <button
-                onClick={handleTriggerRecycle}
-                className="text-xs font-bold px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                title="Atraer post al inicio (Borrador) para nuevo enfoque"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
-                <span className="hidden sm:inline">Reciclar</span>
-              </button>
-            )}
-
-            {canEdit && (
-              <button
-                onClick={() => {
-                  setActiveTab('content');
-                  setIsEditing(!isEditing);
-                }}
-                className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 cursor-pointer ${
-                  isEditing 
-                    ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100' 
-                    : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
-                }`}
-                title={isEditing ? 'Salir del modo edición' : 'Modificar textos y especificaciones'}
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>{isEditing ? 'Viendo Modo Edición' : 'Editar Ficha'}</span>
-              </button>
-            )}
-            {!isClient && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin') && onOpenIntervention && (
-              <button
-                onClick={onOpenIntervention}
-                className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
-              >
-                Intervenir Post
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
 
         {/* Tabs */}
         <div className="flex border-b border-slate-200 px-6 gap-6 text-xs font-bold bg-white">
@@ -473,6 +555,25 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full border border-indigo-200">
                       Modo Edición Activo
                     </span>
+                  </div>
+
+                  {/* Nombre / Número Interno del Post */}
+                  <div className="p-3.5 bg-white rounded-xl border border-indigo-200">
+                    <label className="font-bold text-slate-800 uppercase tracking-wider text-xs block mb-1">
+                      Nombre / Identificador del Post *
+                    </label>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <input
+                        type="text"
+                        value={editNumeroInterno}
+                        onChange={(e) => setEditNumeroInterno(e.target.value)}
+                        placeholder="ej. 01, Post 01 - Folivital Lanzamiento"
+                        className="flex-1 text-sm font-bold text-slate-900 px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none"
+                      />
+                      <span className="text-[11px] text-slate-400 font-medium">
+                        Identificador visible en parrillas y reportes
+                      </span>
+                    </div>
                   </div>
 
                   {/* Especificaciones de Producción: Formato, Tamaño, Prioridad y Fechas */}
@@ -1321,7 +1422,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
       </div>
 
-      {/* MODAL / DIALOG DUPLICAR POST */}
+    </div>
+
+    {/* MODAL / DIALOG DUPLICAR POST */}
       {isDuplicateDialogOpen && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 border border-slate-200 space-y-4">
