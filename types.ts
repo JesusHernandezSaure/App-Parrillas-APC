@@ -15,6 +15,7 @@ export interface UserPermissions {
   canDeleteOdt: boolean;
   canCreatePost: boolean;
   canEditAnyPost: boolean;
+  canEditCopys?: boolean;
   canDeletePost: boolean;
   canApproveAnyStage: boolean;
   canBypassWorkflow: boolean;

@@ -78,13 +78,28 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   };
 
   const isClient = currentUser.role === 'Cliente';
-  const hasEditPermission = Boolean(currentUser.permissions?.canEditAnyPost);
+  const isCorrectorOrMedico = 
+    currentUser.role === 'Corrector' || 
+    currentUser.role === 'Médico' || 
+    Boolean(currentUser.secondaryRoles?.includes('Corrector')) || 
+    Boolean(currentUser.secondaryRoles?.includes('Médico'));
+
+  const hasFullEditPermission = Boolean(currentUser.permissions?.canEditAnyPost);
+  const hasCopysEditPermission = Boolean(currentUser.permissions?.canEditCopys);
   const hasDeletePermission = Boolean(currentUser.permissions?.canDeletePost);
   const isSuperAdminOrAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'Admin';
   const isEjecutivoOrCommunity = currentUser.role === 'Ejecutivo' || currentUser.role === 'Community';
 
-  // Puede editar si tiene permiso canEditAnyPost, es Admin/SuperAdmin, o es Ejecutivo/Community con permiso de edición
-  const canEdit = !isClient && (isSuperAdminOrAdmin || isEjecutivoOrCommunity || hasEditPermission);
+  // Solo pueden editar el post completo (metadatos, dimensiones, formato, fechas, duplicar, reciclar):
+  // Admin, SuperAdmin, Ejecutivo, Community, o usuarios que no sean exclusivamente de revisión médica/corrección
+  const canEditFullPost = !isClient && (isSuperAdminOrAdmin || isEjecutivoOrCommunity || (hasFullEditPermission && !isCorrectorOrMedico));
+
+  // Pueden editar copys (Copy In y Copy Out):
+  // Quien puede editar el post completo, O perfil Corrector/Médico, O quien tenga canEditCopys
+  const canEditCopys = !isClient && (canEditFullPost || isCorrectorOrMedico || hasCopysEditPermission || hasFullEditPermission);
+
+  // Indica si el usuario actual solo debe poder editar los copys (no el post)
+  const isOnlyCopyEditor = !canEditFullPost && canEditCopys;
 
   // Puede eliminar si tiene permiso canDeletePost activado, es Admin/SuperAdmin, o es Ejecutivo/Community
   const canDelete = !isClient && (isSuperAdminOrAdmin || isEjecutivoOrCommunity || hasDeletePermission);
@@ -102,6 +117,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   const [isEditing, setIsEditing] = useState<boolean>(() => {
     if (currentUser.role === 'Cliente') return false;
     if (initialEditMode !== undefined) return initialEditMode;
+    if (isOnlyCopyEditor) {
+      return post.estado === 'Corrección de Copy' || post.estado === 'Revisión Médica';
+    }
     return post.estado === 'Ajustes de Copy' || post.estado === 'En Community' || post.estado === 'Borrador' || post.estado === 'Cambios solicitados por Cliente';
   });
 
@@ -158,21 +176,29 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
   const handleSavePostEdits = () => {
     if (onUpdatePost) {
-      onUpdatePost(post.id, {
-        numeroInterno: editNumeroInterno.trim() || post.numeroInterno,
-        copyIn: editCopyIn.trim(),
-        copyOut: editCopyOut.trim(),
-        enlaceReferencia: editEnlaceReferencia.trim(),
-        enlaceMaterialFinal: editEnlaceMaterialFinal.trim(),
-        fechaPrevista: editFechaPrevista,
-        fechaEntregaMaterial: editFechaEntregaMaterial,
-        tipoMaterial: editTipoMaterial,
-        dimensiones: editDimensiones,
-        nivelPrioridad: editNivelPrioridad,
-        requiereArtePrevio: editTipoMaterial === 'Video' ? editRequiereArtePrevio : false,
-        enlaceEditableArte: editEnlaceEditableArte.trim(),
-        notasArteParaVideo: editNotasArteParaVideo.trim()
-      });
+      if (isOnlyCopyEditor) {
+        // Corrector o Médico: solo edita copys, preserva intactos todos los parámetros del post
+        onUpdatePost(post.id, {
+          copyIn: editCopyIn.trim(),
+          copyOut: editCopyOut.trim()
+        });
+      } else {
+        onUpdatePost(post.id, {
+          numeroInterno: editNumeroInterno.trim() || post.numeroInterno,
+          copyIn: editCopyIn.trim(),
+          copyOut: editCopyOut.trim(),
+          enlaceReferencia: editEnlaceReferencia.trim(),
+          enlaceMaterialFinal: editEnlaceMaterialFinal.trim(),
+          fechaPrevista: editFechaPrevista,
+          fechaEntregaMaterial: editFechaEntregaMaterial,
+          tipoMaterial: editTipoMaterial,
+          dimensiones: editDimensiones,
+          nivelPrioridad: editNivelPrioridad,
+          requiereArtePrevio: editTipoMaterial === 'Video' ? editRequiereArtePrevio : false,
+          enlaceEditableArte: editEnlaceEditableArte.trim(),
+          notasArteParaVideo: editNotasArteParaVideo.trim()
+        });
+      }
     }
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
@@ -337,8 +363,8 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
               {/* Barra de Acciones del Post */}
               <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:justify-end shrink-0">
-                {/* Botón Editar posts (Modo edición) */}
-                {canEdit && (
+                {/* Botón Editar (Copys o Post Completo según perfil) */}
+                {canEditCopys && (
                   <button
                     type="button"
                     onClick={() => {
@@ -348,17 +374,29 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
                       isEditing 
                         ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200 ring-2 ring-amber-400/30' 
+                        : isOnlyCopyEditor
+                        ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
                         : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
                     }`}
-                    title={isEditing ? 'Salir del modo edición' : 'Modificar nombre, textos y especificaciones del post'}
+                    title={
+                      isEditing 
+                        ? 'Salir del modo edición' 
+                        : isOnlyCopyEditor 
+                        ? 'Modificar Copy In y Copy Out de esta publicación' 
+                        : 'Modificar nombre, textos y especificaciones del post'
+                    }
                   >
                     <Edit3 className="w-3.5 h-3.5" />
-                    <span>{isEditing ? 'Modo Edición Activo' : 'Editar posts'}</span>
+                    <span>
+                      {isEditing 
+                        ? (isOnlyCopyEditor ? 'Editando Copys' : 'Modo Edición Activo') 
+                        : (isOnlyCopyEditor ? 'Editar Copys' : 'Editar posts')}
+                    </span>
                   </button>
                 )}
 
-                {/* Botón Duplicar */}
-                {canEdit && onDuplicatePost && (
+                {/* Botón Duplicar (Solo para editores de post completo) */}
+                {canEditFullPost && onDuplicatePost && (
                   <button
                     type="button"
                     onClick={() => setIsDuplicateDialogOpen(true)}
@@ -370,8 +408,8 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   </button>
                 )}
 
-                {/* Botón Reciclar */}
-                {canEdit && onRecyclePost && post.estado !== 'Borrador' && (
+                {/* Botón Reciclar (Solo para editores de post completo) */}
+                {canEditFullPost && onRecyclePost && post.estado !== 'Borrador' && (
                   <button
                     type="button"
                     onClick={handleTriggerRecycle}
@@ -537,118 +575,141 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
               {/* Si está en modo edición */}
               {isEditing ? (
-                <div className="space-y-4 bg-slate-50/80 p-5 rounded-2xl border-2 border-indigo-300 shadow-xs">
-                  <div className="flex items-center justify-between pb-3 border-b border-indigo-100 flex-wrap gap-2">
+                <div className={`space-y-4 p-5 rounded-2xl border-2 shadow-xs ${
+                  isOnlyCopyEditor 
+                    ? 'bg-purple-50/50 border-purple-300' 
+                    : 'bg-slate-50/80 border-indigo-300'
+                }`}>
+                  <div className={`flex items-center justify-between pb-3 border-b flex-wrap gap-2 ${
+                    isOnlyCopyEditor ? 'border-purple-200' : 'border-indigo-100'
+                  }`}>
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <div className={`w-8 h-8 rounded-xl text-white flex items-center justify-center shrink-0 shadow-xs ${
+                        isOnlyCopyEditor ? 'bg-purple-600' : 'bg-indigo-600'
+                      }`}>
                         <Edit3 className="w-4 h-4" />
                       </div>
                       <div>
-                        <h3 className="text-xs font-black uppercase tracking-wider text-indigo-950">
-                          Editor de Contenido y Especificaciones
+                        <h3 className={`text-xs font-black uppercase tracking-wider ${
+                          isOnlyCopyEditor ? 'text-purple-950' : 'text-indigo-950'
+                        }`}>
+                          {isOnlyCopyEditor 
+                            ? 'Edición Exclusiva de Copys (Corrección y Médico)' 
+                            : 'Editor de Contenido y Especificaciones'}
                         </h3>
                         <p className="text-[11px] text-slate-500">
-                          Modifica textos, fechas, medidas o el requerimiento de material.
+                          {isOnlyCopyEditor
+                            ? 'Ajusta exclusivamente la redacción, claims, ortografía y textos de Copy In y Copy Out.'
+                            : 'Modifica textos, fechas, medidas o el requerimiento de material.'}
                         </p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full border border-indigo-200">
-                      Modo Edición Activo
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                      isOnlyCopyEditor
+                        ? 'text-purple-700 bg-purple-100 border-purple-200'
+                        : 'text-indigo-700 bg-indigo-100 border-indigo-200'
+                    }`}>
+                      {isOnlyCopyEditor ? 'Solo Copys' : 'Modo Edición Completo'}
                     </span>
                   </div>
 
-                  {/* Nombre / Número Interno del Post */}
-                  <div className="p-3.5 bg-white rounded-xl border border-indigo-200">
-                    <label className="font-bold text-slate-800 uppercase tracking-wider text-xs block mb-1">
-                      Nombre / Identificador del Post *
-                    </label>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                      <input
-                        type="text"
-                        value={editNumeroInterno}
-                        onChange={(e) => setEditNumeroInterno(e.target.value)}
-                        placeholder="ej. 01, Post 01 - Folivital Lanzamiento"
-                        className="flex-1 text-sm font-bold text-slate-900 px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none"
-                      />
-                      <span className="text-[11px] text-slate-400 font-medium">
-                        Identificador visible en parrillas y reportes
-                      </span>
-                    </div>
-                  </div>
+                  {/* Nombre / Número Interno y Especificaciones SOLO para editores de post completo */}
+                  {canEditFullPost && (
+                    <>
+                      {/* Nombre / Número Interno del Post */}
+                      <div className="p-3.5 bg-white rounded-xl border border-indigo-200">
+                        <label className="font-bold text-slate-800 uppercase tracking-wider text-xs block mb-1">
+                          Nombre / Identificador del Post *
+                        </label>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <input
+                            type="text"
+                            value={editNumeroInterno}
+                            onChange={(e) => setEditNumeroInterno(e.target.value)}
+                            placeholder="ej. 01, Post 01 - Folivital Lanzamiento"
+                            className="flex-1 text-sm font-bold text-slate-900 px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all outline-none"
+                          />
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            Identificador visible en parrillas y reportes
+                          </span>
+                        </div>
+                      </div>
 
-                  {/* Especificaciones de Producción: Formato, Tamaño, Prioridad y Fechas */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-white rounded-xl border border-indigo-200 text-xs">
-                    <div>
-                      <label className="font-bold text-slate-700 uppercase tracking-wider text-[10px] block mb-1">
-                        Formato de Entrega:
-                      </label>
-                      <select
-                        value={editTipoMaterial}
-                        onChange={(e) => setEditTipoMaterial(e.target.value as MaterialType)}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-xs"
-                      >
-                        {MATERIAL_TYPES.map(m => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    </div>
+                      {/* Especificaciones de Producción: Formato, Tamaño, Prioridad y Fechas */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-white rounded-xl border border-indigo-200 text-xs">
+                        <div>
+                          <label className="font-bold text-slate-700 uppercase tracking-wider text-[10px] block mb-1">
+                            Formato de Entrega:
+                          </label>
+                          <select
+                            value={editTipoMaterial}
+                            onChange={(e) => setEditTipoMaterial(e.target.value as MaterialType)}
+                            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-xs"
+                          >
+                            {MATERIAL_TYPES.map(m => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                    <div>
-                      <label className="font-bold text-slate-700 uppercase tracking-wider text-[10px] block mb-1">
-                        Tamaño / Medidas:
-                      </label>
-                      <select
-                        value={editDimensiones}
-                        onChange={(e) => setEditDimensiones(e.target.value)}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-xs"
-                      >
-                        {DIMENSION_OPTIONS.map(d => (
-                          <option key={d.id} value={d.id}>{d.label}</option>
-                        ))}
-                      </select>
-                    </div>
+                        <div>
+                          <label className="font-bold text-slate-700 uppercase tracking-wider text-[10px] block mb-1">
+                            Tamaño / Medidas:
+                          </label>
+                          <select
+                            value={editDimensiones}
+                            onChange={(e) => setEditDimensiones(e.target.value)}
+                            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-xs"
+                          >
+                            {DIMENSION_OPTIONS.map(d => (
+                              <option key={d.id} value={d.id}>{d.label}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                    <div>
-                      <label className="font-bold text-slate-700 uppercase tracking-wider text-[10px] block mb-1">
-                        Nivel de Prioridad:
-                      </label>
-                      <select
-                        value={editNivelPrioridad}
-                        onChange={(e) => setEditNivelPrioridad(e.target.value as PriorityLevel)}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs"
-                      >
-                        <option value="Nivel 1">🔴 Nivel 1 (Muy importante / Urgente)</option>
-                        <option value="Nivel 2">🟡 Nivel 2 (Importante / Estándar)</option>
-                        <option value="Nivel 3">🟢 Nivel 3 (No tan importante / Flexible)</option>
-                      </select>
-                    </div>
+                        <div>
+                          <label className="font-bold text-slate-700 uppercase tracking-wider text-[10px] block mb-1">
+                            Nivel de Prioridad:
+                          </label>
+                          <select
+                            value={editNivelPrioridad}
+                            onChange={(e) => setEditNivelPrioridad(e.target.value as PriorityLevel)}
+                            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-xs"
+                          >
+                            <option value="Nivel 1">🔴 Nivel 1 (Muy importante / Urgente)</option>
+                            <option value="Nivel 2">🟡 Nivel 2 (Importante / Estándar)</option>
+                            <option value="Nivel 3">🟢 Nivel 3 (No tan importante / Flexible)</option>
+                          </select>
+                        </div>
 
-                    <div className="sm:col-span-1 bg-amber-50/60 p-2.5 rounded-lg border border-amber-200">
-                      <label className="font-bold text-amber-900 uppercase tracking-wider text-[10px] block mb-1 flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-amber-600" />
-                        <span>Entrega Arte/Video:</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={editFechaEntregaMaterial}
-                        onChange={(e) => setEditFechaEntregaMaterial(e.target.value)}
-                        className="w-full p-1.5 bg-white border border-amber-300 rounded font-semibold text-xs"
-                      />
-                    </div>
+                        <div className="sm:col-span-1 bg-amber-50/60 p-2.5 rounded-lg border border-amber-200">
+                          <label className="font-bold text-amber-900 uppercase tracking-wider text-[10px] block mb-1 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            <span>Entrega Arte/Video:</span>
+                          </label>
+                          <input
+                            type="date"
+                            value={editFechaEntregaMaterial}
+                            onChange={(e) => setEditFechaEntregaMaterial(e.target.value)}
+                            className="w-full p-1.5 bg-white border border-amber-300 rounded font-semibold text-xs"
+                          />
+                        </div>
 
-                    <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                      <label className="font-bold text-slate-700 uppercase tracking-wider text-[10px] block mb-1 flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-indigo-600" />
-                        <span>Fecha de Publicación en Redes:</span>
-                      </label>
-                      <input
-                        type="date"
-                        value={editFechaPrevista}
-                        onChange={(e) => setEditFechaPrevista(e.target.value)}
-                        className="w-full p-1.5 bg-white border border-slate-300 rounded font-semibold text-xs"
-                      />
-                    </div>
-                  </div>
+                        <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                          <label className="font-bold text-slate-700 uppercase tracking-wider text-[10px] block mb-1 flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-indigo-600" />
+                            <span>Fecha de Publicación en Redes:</span>
+                          </label>
+                          <input
+                            type="date"
+                            value={editFechaPrevista}
+                            onChange={(e) => setEditFechaPrevista(e.target.value)}
+                            className="w-full p-1.5 bg-white border border-slate-300 rounded font-semibold text-xs"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   {/* COPY IN */}
                   <div className="space-y-1.5">
@@ -684,91 +745,95 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     />
                   </div>
 
-                  {/* ENLACES */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
-                    <div>
-                      <label className="text-[11px] font-bold uppercase text-slate-700 block mb-1">
-                        Enlace de Referencia (Google Drive / Sitio)
-                      </label>
-                      <input
-                        type="url"
-                        value={editEnlaceReferencia}
-                        onChange={(e) => setEditEnlaceReferencia(e.target.value)}
-                        placeholder="https://drive.google.com/..."
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-bold uppercase text-slate-700 block mb-1">
-                        Enlace del Material Final (Arte / Video)
-                      </label>
-                      <input
-                        type="url"
-                        value={editEnlaceMaterialFinal}
-                        onChange={(e) => setEditEnlaceMaterialFinal(e.target.value)}
-                        placeholder="https://onedrive.live.com/..."
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Configuración de Editables de Arte para Video (Telefém) */}
-                  {editTipoMaterial === 'Video' && (
-                    <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/60 space-y-3">
-                      <div className="flex items-center justify-between gap-3">
+                  {/* ENLACES Y CONFIGURACIÓN TÉCNICA (SOLO para editores de post completo) */}
+                  {canEditFullPost && (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
                         <div>
-                          <label 
-                            onClick={() => setEditRequiereArtePrevio(!editRequiereArtePrevio)}
-                            className="text-xs font-bold text-purple-950 cursor-pointer block"
-                          >
-                            ¿Requiere diseño / editables previos de Arte? (Ej. Telefém / Animación)
+                          <label className="text-[11px] font-bold uppercase text-slate-700 block mb-1">
+                            Enlace de Referencia (Google Drive / Sitio)
                           </label>
-                          <span className="text-[11px] text-purple-700">
-                            Si está activo, al aprobarse el copy pasa primero a Arte y luego a Audio y Video.
-                          </span>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                          <input 
-                            type="checkbox" 
-                            checked={editRequiereArtePrevio} 
-                            onChange={(e) => setEditRequiereArtePrevio(e.target.checked)} 
-                            className="sr-only peer"
+                          <input
+                            type="url"
+                            value={editEnlaceReferencia}
+                            onChange={(e) => setEditEnlaceReferencia(e.target.value)}
+                            placeholder="https://drive.google.com/..."
+                            className="w-full text-xs p-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-indigo-500"
                           />
-                          <div className="w-11 h-6 bg-slate-300 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                        </label>
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] font-bold uppercase text-slate-700 block mb-1">
+                            Enlace del Material Final (Arte / Video)
+                          </label>
+                          <input
+                            type="url"
+                            value={editEnlaceMaterialFinal}
+                            onChange={(e) => setEditEnlaceMaterialFinal(e.target.value)}
+                            placeholder="https://onedrive.live.com/..."
+                            className="w-full text-xs p-2.5 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
                       </div>
 
-                      {editRequiereArtePrevio && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-purple-200/80">
-                          <div>
-                            <label className="text-[11px] font-bold uppercase text-purple-900 block mb-1">
-                              Enlace de Recursos Editables (Subido por Arte)
+                      {/* Configuración de Editables de Arte para Video (Telefém) */}
+                      {editTipoMaterial === 'Video' && (
+                        <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/60 space-y-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <label 
+                                onClick={() => setEditRequiereArtePrevio(!editRequiereArtePrevio)}
+                                className="text-xs font-bold text-purple-950 cursor-pointer block"
+                              >
+                                ¿Requiere diseño / editables previos de Arte? (Ej. Telefém / Animación)
+                              </label>
+                              <span className="text-[11px] text-purple-700">
+                                Si está activo, al aprobarse el copy pasa primero a Arte y luego a Audio y Video.
+                              </span>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                              <input 
+                                type="checkbox" 
+                                checked={editRequiereArtePrevio} 
+                                onChange={(e) => setEditRequiereArtePrevio(e.target.checked)} 
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-300 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                             </label>
-                            <input
-                              type="url"
-                              value={editEnlaceEditableArte}
-                              onChange={(e) => setEditEnlaceEditableArte(e.target.value)}
-                              placeholder="https://apcpublicidad-my.sharepoint.com/... o Drive"
-                              className="w-full text-xs p-2.5 rounded-xl border border-purple-200 bg-white focus:ring-2 focus:ring-purple-500"
-                            />
                           </div>
 
-                          <div>
-                            <label className="text-[11px] font-bold uppercase text-purple-900 block mb-1">
-                              Notas de Arte para Audio y Video
-                            </label>
-                            <input
-                              type="text"
-                              value={editNotasArteParaVideo}
-                              onChange={(e) => setEditNotasArteParaVideo(e.target.value)}
-                              placeholder="Ej. Capas de personajes separadas en archivo .ai..."
-                              className="w-full text-xs p-2.5 rounded-xl border border-purple-200 bg-white focus:ring-2 focus:ring-purple-500"
-                            />
-                          </div>
+                          {editRequiereArtePrevio && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-purple-200/80">
+                              <div>
+                                <label className="text-[11px] font-bold uppercase text-purple-900 block mb-1">
+                                  Enlace de Recursos Editables (Subido por Arte)
+                                </label>
+                                <input
+                                  type="url"
+                                  value={editEnlaceEditableArte}
+                                  onChange={(e) => setEditEnlaceEditableArte(e.target.value)}
+                                  placeholder="https://apcpublicidad-my.sharepoint.com/... o Drive"
+                                  className="w-full text-xs p-2.5 rounded-xl border border-purple-200 bg-white focus:ring-2 focus:ring-purple-500"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[11px] font-bold uppercase text-purple-900 block mb-1">
+                                  Notas de Arte para Audio y Video
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editNotasArteParaVideo}
+                                  onChange={(e) => setEditNotasArteParaVideo(e.target.value)}
+                                  placeholder="Ej. Capas de personajes separadas en archivo .ai..."
+                                  className="w-full text-xs p-2.5 rounded-xl border border-purple-200 bg-white focus:ring-2 focus:ring-purple-500"
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
-                    </div>
+                    </>
                   )}
 
                   {/* BOTONES DE GUARDADO Y ACCIÓN */}
@@ -785,13 +850,17 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       <button
                         type="button"
                         onClick={handleSavePostEdits}
-                        className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                        className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer ${
+                          isOnlyCopyEditor 
+                            ? 'bg-purple-600 hover:bg-purple-700' 
+                            : 'bg-indigo-600 hover:bg-indigo-700'
+                        }`}
                       >
                         <Save className="w-3.5 h-3.5" />
-                        <span>Guardar Cambios</span>
+                        <span>{isOnlyCopyEditor ? 'Guardar Copys' : 'Guardar Cambios'}</span>
                       </button>
 
-                      {odt && onSendToReview && (post.estado === 'Ajustes de Copy' || post.estado === 'En Community' || post.estado === 'Borrador' || post.estado === 'Cambios solicitados por Cliente') && (
+                      {canEditFullPost && odt && onSendToReview && (post.estado === 'Ajustes de Copy' || post.estado === 'En Community' || post.estado === 'Borrador' || post.estado === 'Cambios solicitados por Cliente') && (
                         <button
                           type="button"
                           onClick={handleSaveAndSendToReview}
@@ -812,7 +881,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                         Copy In (Texto sobre la imagen / gráfica)
                       </span>
-                      {canEdit && (
+                      {canEditCopys && (
                         <button
                           onClick={() => setIsEditing(true)}
                           className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity cursor-pointer bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200"
@@ -835,7 +904,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                         Copy Out (Texto de la publicación / Caption)
                       </span>
-                      {canEdit && (
+                      {canEditCopys && (
                         <button
                           onClick={() => setIsEditing(true)}
                           className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity cursor-pointer bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200"
@@ -853,11 +922,15 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     />
                   </div>
 
-                  {canEdit && (
+                  {canEditCopys && (
                     <div className="p-3.5 bg-indigo-50/70 rounded-xl border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                       <div className="flex items-center gap-2 text-indigo-900 font-semibold">
                         <Edit3 className="w-4 h-4 text-indigo-600 shrink-0" />
-                        <span>¿Deseas editar los textos o aplicar los cambios solicitados por el cliente?</span>
+                        <span>
+                          {isOnlyCopyEditor
+                            ? '¿Deseas corregir o perfeccionar los textos de Copy In y Copy Out?'
+                            : '¿Deseas editar los textos o aplicar los cambios solicitados por el cliente?'}
+                        </span>
                       </div>
                       <button
                         onClick={() => setIsEditing(true)}

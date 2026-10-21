@@ -17,6 +17,7 @@ export function getDefaultPermissions(role: UserRole): UserPermissions {
       canDeleteOdt: true,
       canCreatePost: true,
       canEditAnyPost: true,
+      canEditCopys: true,
       canDeletePost: true,
       canApproveAnyStage: true,
       canBypassWorkflow: true,
@@ -34,6 +35,7 @@ export function getDefaultPermissions(role: UserRole): UserPermissions {
       canDeleteOdt: false,
       canCreatePost: true,
       canEditAnyPost: true,
+      canEditCopys: true,
       canDeletePost: true,
       canApproveAnyStage: true,
       canBypassWorkflow: true,
@@ -51,6 +53,7 @@ export function getDefaultPermissions(role: UserRole): UserPermissions {
       canDeleteOdt: false,
       canCreatePost: true,
       canEditAnyPost: true,
+      canEditCopys: true,
       canDeletePost: true,
       canApproveAnyStage: false,
       canBypassWorkflow: false,
@@ -61,13 +64,32 @@ export function getDefaultPermissions(role: UserRole): UserPermissions {
       canSuperviseAll: false,
     };
   }
-  if (['Médico', 'Corrector', 'Arte', 'Audio y Video'].includes(role)) {
+  if (role === 'Corrector' || role === 'Médico') {
     return {
       canCreateOdt: false,
       canEditOdt: false,
       canDeleteOdt: false,
       canCreatePost: false,
       canEditAnyPost: false,
+      canEditCopys: true,
+      canDeletePost: false,
+      canApproveAnyStage: false,
+      canBypassWorkflow: false,
+      canPublishPost: false,
+      canManageUsers: false,
+      canManageClients: false,
+      canViewInternalComments: true,
+      canSuperviseAll: false,
+    };
+  }
+  if (['Arte', 'Audio y Video'].includes(role)) {
+    return {
+      canCreateOdt: false,
+      canEditOdt: false,
+      canDeleteOdt: false,
+      canCreatePost: false,
+      canEditAnyPost: false,
+      canEditCopys: false,
       canDeletePost: false,
       canApproveAnyStage: false,
       canBypassWorkflow: false,
@@ -174,7 +196,8 @@ export function getStoredUsers(): User[] {
               ...getDefaultPermissions(role),
               ...mergedSecondaryPerms,
               ...(u.permissions || {}),
-              ...((role === 'Community' || role === 'Ejecutivo' || userSecondaryRoles.includes('Community') || userSecondaryRoles.includes('Ejecutivo')) ? { canEditAnyPost: true, canDeletePost: true } : {})
+              ...((role === 'Community' || role === 'Ejecutivo' || userSecondaryRoles.includes('Community') || userSecondaryRoles.includes('Ejecutivo')) ? { canEditAnyPost: true, canDeletePost: true, canEditCopys: true } : {}),
+              ...((role === 'Corrector' || role === 'Médico' || userSecondaryRoles.includes('Corrector') || userSecondaryRoles.includes('Médico')) ? { canEditAnyPost: false, canEditCopys: true } : {})
             },
         clientId: role === 'Cliente' ? normalizedClientId : undefined,
         clientIds: role === 'Cliente' ? normalizedClientIds : undefined,

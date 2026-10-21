@@ -6,6 +6,7 @@ export const FULL_PERMISSIONS: UserPermissions = {
   canDeleteOdt: true,
   canCreatePost: true,
   canEditAnyPost: true,
+  canEditCopys: true,
   canDeletePost: true,
   canApproveAnyStage: true,
   canBypassWorkflow: true,

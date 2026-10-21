@@ -1627,7 +1627,20 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                     />
                     <div>
                       <div className="font-bold text-slate-800">Editar posts</div>
-                      <div className="text-[10px] text-slate-500">Modificar nombre, copys y especificaciones en cualquier etapa</div>
+                      <div className="text-[10px] text-slate-500">Modificar nombre, formato, medidas, fechas y especificaciones completas</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-slate-200 cursor-pointer hover:border-amber-400">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(userPermissions.canEditCopys ?? userPermissions.canEditAnyPost)}
+                      onChange={(e) => setUserPermissions(prev => ({ ...prev, canEditCopys: e.target.checked }))}
+                      className="rounded text-amber-500 focus:ring-amber-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-800">Editar solo Copys</div>
+                      <div className="text-[10px] text-slate-500">Modificar Copy In y Copy Out exclusivamente (ideal para Corrector y Médico)</div>
                     </div>
                   </label>
 

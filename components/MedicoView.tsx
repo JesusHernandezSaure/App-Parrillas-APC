@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Post, ODT, Client, User } from '../types';
-import { Stethoscope, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Clock, Check, Filter, UserCheck, Eye } from 'lucide-react';
+import { Stethoscope, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Clock, Check, Filter, UserCheck, Eye, Edit3 } from 'lucide-react';
 import { RichTextDisplay } from './RichTextDisplay';
 
 interface MedicoViewProps {
@@ -9,7 +9,7 @@ interface MedicoViewProps {
   clients: Client[];
   currentUser: User;
   onOpenApprovalModal: (post: Post) => void;
-  onSelectPost: (post: Post) => void;
+  onSelectPost: (post: Post, startEditing?: boolean) => void;
 }
 
 export const MedicoView: React.FC<MedicoViewProps> = ({
@@ -259,13 +259,21 @@ export const MedicoView: React.FC<MedicoViewProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => onSelectPost(post)}
-                        className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                       >
                         Ver Detalle
                       </button>
                       <button
+                        onClick={() => onSelectPost(post, true)}
+                        className="px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        title="Editar Copy In y Copy Out para ajustar terminología médica o claims"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        Editar Copys
+                      </button>
+                      <button
                         onClick={() => onOpenApprovalModal(post)}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                       >
                         <ShieldCheck className="w-4 h-4" />
                         Revisar y Dictaminar

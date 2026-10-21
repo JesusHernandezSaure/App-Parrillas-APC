@@ -1739,8 +1739,9 @@ export const App: React.FC = () => {
               setApprovalType(post.estado === 'Revisión Médica Material' ? 'medico_material' : 'medico');
               setIsApprovalOpen(true);
             }}
-            onSelectPost={(post) => {
+            onSelectPost={(post, startEditing) => {
               setActiveModalPost(post);
+              setDetailInitialEditMode(Boolean(startEditing));
               setIsDetailOpen(true);
             }}
           />
@@ -1758,8 +1759,9 @@ export const App: React.FC = () => {
               setApprovalType(type);
               setIsApprovalOpen(true);
             }}
-            onSelectPost={(post) => {
+            onSelectPost={(post, startEditing) => {
               setActiveModalPost(post);
+              setDetailInitialEditMode(Boolean(startEditing));
               setIsDetailOpen(true);
             }}
           />
