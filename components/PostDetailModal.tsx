@@ -4,7 +4,7 @@ import {
   X, CheckCircle2, Clock, AlertTriangle, ExternalLink, ShieldCheck, 
   MessageSquare, Send, History, ArrowRight, UserCircle2, Eye, EyeOff,
   Edit3, Save, Check, Copy, RefreshCw, Calendar, Sparkles, Globe, Share2, Trash2,
-  Stethoscope, Palette, Video, Layers
+  Stethoscope, Palette, Video, Layers, Plus
 } from 'lucide-react';
 import { getNowTimestamp } from '../services/odtService';
 import { PostStageMap } from './PostPipelineTracker';
