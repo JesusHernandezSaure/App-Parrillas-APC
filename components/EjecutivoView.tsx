@@ -12,6 +12,7 @@ import {
 } from './PostPipelineTracker';
 import { RichTextDisplay, stripHtml } from './RichTextDisplay';
 import { PostContentFourPanels } from './PostContentFourPanels';
+import { getPilarColor } from './InteractiveCalendarPicker';
 
 export type Level3StageKey = 'all' | 'copy' | 'correction' | 'waiting_exec' | 'with_client' | 'production' | 'ready_publish' | 'published' | 'delayed';
 
@@ -618,6 +619,21 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
       delayedCount
     };
   }, [activeOdtPosts]);
+
+  // Balance y conteo de posts por Pilar temático en la ODT seleccionada
+  const odtPilarCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (activeOdt?.pilares && Array.isArray(activeOdt.pilares)) {
+      activeOdt.pilares.forEach(pil => {
+        counts[pil] = 0;
+      });
+    }
+    activeOdtPosts.forEach(p => {
+      const pil = p.pilar || 'Sin pilar';
+      counts[pil] = (counts[pil] || 0) + 1;
+    });
+    return counts;
+  }, [activeOdt, activeOdtPosts]);
 
   // Posts de la ODT seleccionada o filtrados
   const filteredPosts = useMemo(() => {
@@ -1474,6 +1490,55 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
             </div>
           )}
 
+          {/* Balance de Pilares de la Parrilla */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs space-y-2.5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                    Balance de Pilares de Contenido
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Distribución de publicaciones por pilar temático en esta parrilla
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                {activeOdtPosts.length} posts totales en la ODT
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap pt-1">
+              {Object.entries(odtPilarCounts).length > 0 ? (
+                Object.entries(odtPilarCounts).map(([pil, count]) => {
+                  const col = getPilarColor(pil);
+                  return (
+                    <div
+                      key={pil}
+                      className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 shadow-2xs transition-all ${
+                        count === 0 
+                          ? 'bg-slate-50 text-slate-600 border-dashed border-slate-300 opacity-80' 
+                          : `${col.bg} ${col.text} ${col.border}`
+                      }`}
+                      title={count === 0 ? `Pilar oficial sin publicaciones asignadas aún en esta ODT` : `${count} post(s) con este pilar`}
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-full ${count === 0 ? 'bg-slate-400' : col.dot}`}></span>
+                      <span className="text-xs font-bold">{pil}:</span>
+                      <span className={`text-xs font-black px-1.5 py-0.2 rounded-md ${count === 0 ? 'bg-slate-200 text-slate-700' : 'bg-white/90'}`}>
+                        {count}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <span className="text-xs text-slate-400 italic">No hay posts registrados aún en esta parrilla.</span>
+              )}
+            </div>
+          </div>
+
           {/* LISTA Y TABLA DE POSTS */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
             
@@ -1614,6 +1679,11 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                           <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold">
                             {post.redSocial}
                           </span>
+                          {post.pilar && (
+                            <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold border ${getPilarColor(post.pilar).bg} ${getPilarColor(post.pilar).text} ${getPilarColor(post.pilar).border}`}>
+                              Pilar: {post.pilar}
+                            </span>
+                          )}
                           <span className="text-xs px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-bold">
                             {post.tipoMaterial}
                           </span>

@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Post, ODT, MaterialType, PostDimensions, PriorityLevel, User } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Post, ODT, MaterialType, PostDimensions, PriorityLevel, User, DEFAULT_PILARES } from '../types';
 import { Sparkles, X, Plus, ExternalLink, Send, Calendar, Clock, Layers, AlertCircle, Palette } from 'lucide-react';
 import { RichTextEditor } from './RichTextEditor';
+import { InteractiveCalendarPicker, getPilarColor } from './InteractiveCalendarPicker';
 
 interface CreatePostModalProps {
   odt: ODT;
   existingPostsCount: number;
   currentUser: User;
+  posts?: Post[];
   onClose: () => void;
   onCreate: (newPost: Post, sendToReview: boolean) => void;
 }
@@ -40,6 +42,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   odt,
   existingPostsCount,
   currentUser,
+  posts = [],
   onClose,
   onCreate
 }) => {
@@ -47,9 +50,26 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     ? odt.redesSociales
     : ['Instagram', 'Facebook', 'LinkedIn', 'TikTok', 'X (Twitter)', 'YouTube'];
 
+  // Pilares de contenido heredados de la ODT o marca cliente
+  const availablePilares: string[] = useMemo(() => {
+    if (odt?.pilares && odt.pilares.length > 0) {
+      return odt.pilares;
+    }
+    return [...DEFAULT_PILARES];
+  }, [odt]);
+
   const nextNumber = `POST-${String((existingPostsCount || 0) + 1).padStart(2, '0')}`;
   const [numeroInterno, setNumeroInterno] = useState(nextNumber);
   const [redSocial, setRedSocial] = useState(availableRedes[0] || 'Instagram');
+  const [pilar, setPilar] = useState<string>(() => {
+    if (odt?.pilares && odt.pilares.length > 0) {
+      return odt.pilares[0];
+    }
+    return DEFAULT_PILARES[0];
+  });
+  const [customPilarInput, setCustomPilarInput] = useState('');
+  const [isAddingCustomPilar, setIsAddingCustomPilar] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   
   // Fechas: Publicación vs Entrega Material
   const defaultPubDate = odt?.fechaObjetivo || new Date().toISOString().split('T')[0];
@@ -131,6 +151,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       odtId: odt?.id || '',
       clientId: odt?.clientId || '',
       redSocial,
+      pilar,
       fechaPrevista,
       fechaEntregaMaterial: fechaEntregaMaterial || fechaPrevista,
       tipoMaterial,
@@ -138,7 +159,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       nivelPrioridad,
       copyIn: copyIn.trim(),
       copyOut: copyOut.trim(),
-      enlaceReferencia: '',
+      enlaceReferencia: enlaceReferencia.trim(),
       enlaceMaterialFinal: '',
       requiereArtePrevio: tipoMaterial === 'Video' ? requiereArtePrevio : false,
       enlaceEditableArte: '',
@@ -240,6 +261,114 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Selector de Pilar Temático del Post */}
+          <div className="p-3.5 bg-emerald-50/40 rounded-2xl border border-emerald-200/80">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Pilar del Contenido *</span>
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.2 rounded-full">
+                  Parrilla: {odt.nombreParrilla}
+                </span>
+              </label>
+              <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${getPilarColor(pilar).bg} ${getPilarColor(pilar).text} ${getPilarColor(pilar).border}`}>
+                Pilar: {pilar}
+              </span>
+            </div>
+            
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {availablePilares.map(pil => {
+                const isSelected = pilar === pil;
+                const col = getPilarColor(pil);
+                return (
+                  <button
+                    key={pil}
+                    type="button"
+                    onClick={() => {
+                      setPilar(pil);
+                      setIsAddingCustomPilar(false);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isSelected
+                        ? `${col.bg} ${col.text} ${col.border} ring-2 ring-emerald-400/50 shadow-xs font-black`
+                        : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${isSelected ? col.dot : 'bg-slate-300'}`}></span>
+                    <span>{pil}</span>
+                  </button>
+                );
+              })}
+
+              {/* Si el post actual tiene un pilar que no está en availablePilares (ej. histórico o personalizado) */}
+              {!availablePilares.includes(pilar) && pilar && (
+                <button
+                  type="button"
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all cursor-pointer flex items-center gap-1.5 ring-2 ring-emerald-400/50 shadow-xs ${getPilarColor(pilar).bg} ${getPilarColor(pilar).text} ${getPilarColor(pilar).border}`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${getPilarColor(pilar).dot}`}></span>
+                  <span>{pilar} (Personalizado)</span>
+                </button>
+              )}
+
+              {/* Botón para especificar otro pilar */}
+              {!isAddingCustomPilar ? (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCustomPilar(true)}
+                  className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-dashed border-emerald-300 hover:border-emerald-500 bg-white hover:bg-emerald-50 text-emerald-700 transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Otro pilar...</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-emerald-300 shadow-2xs">
+                  <input
+                    type="text"
+                    value={customPilarInput}
+                    onChange={(e) => setCustomPilarInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (customPilarInput.trim()) {
+                          setPilar(customPilarInput.trim());
+                          setIsAddingCustomPilar(false);
+                          setCustomPilarInput('');
+                        }
+                      }
+                    }}
+                    placeholder="Nombre del pilar..."
+                    className="text-xs px-2 py-1 outline-none text-slate-800 w-36"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (customPilarInput.trim()) {
+                        setPilar(customPilarInput.trim());
+                        setIsAddingCustomPilar(false);
+                        setCustomPilarInput('');
+                      }
+                    }}
+                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold"
+                  >
+                    Usar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingCustomPilar(false)}
+                    className="p-1 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1.5">
+              Pilares asignados para esta marca y ODT. Permite balancear la frecuencia de temas en el calendario mensual.
+            </p>
           </div>
 
           {/* Pestañas de Tamaños / Dimensiones en Píxeles */}
@@ -406,10 +535,21 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             </div>
 
             <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
-              <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-1 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Fecha Prevista de Publicación *</span>
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Fecha Prevista de Publicación *</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsCalendarOpen(true)}
+                  className="text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Abrir planificador de fechas para ver balance y pilares de la semana"
+                >
+                  <Calendar className="w-3 h-3 text-indigo-600" />
+                  <span>Planificador & Pilares</span>
+                </button>
+              </div>
               <input
                 type="date"
                 required
@@ -500,6 +640,21 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
         </div>
 
       </div>
+
+      {/* Modal Interactivo de Calendario y Balance de Pilares */}
+      {isCalendarOpen && (
+        <InteractiveCalendarPicker
+          isOpen={isCalendarOpen}
+          selectedDate={fechaPrevista}
+          onChange={(newDate) => handlePubDateChange(newDate)}
+          posts={posts}
+          currentPilar={pilar}
+          availablePilares={availablePilares}
+          onClose={() => setIsCalendarOpen(false)}
+          title={`Planificador de Publicación — ODT: ${odt.nombreParrilla}`}
+        />
+      )}
+
     </div>
   );
 };

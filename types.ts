@@ -59,6 +59,7 @@ export interface Client {
   status: 'Activo' | 'Inactivo';
   createdAt: string;
   industry?: string;
+  pilares?: string[]; // Pilares oficiales de contenido de la marca
 }
 
 export interface ODT {
@@ -93,6 +94,7 @@ export interface ODT {
   rondasAprobacion?: ParrillaApprovalRound[];
   estadoAprobacionCopy?: 'Pendiente Interno' | 'Listo para Revisión Cliente' | 'Aprobada' | 'Cambios Solicitados';
   estadoAprobacionMaterial?: 'Pendiente Interno' | 'Listo para Revisión Cliente' | 'Aprobada' | 'Cambios Solicitados';
+  pilares?: string[];
 }
 
 export interface PostChangeRequest {
@@ -184,12 +186,24 @@ export interface PostPublicationLink {
   fechaPublicacion?: string;
 }
 
+export const DEFAULT_PILARES = [
+  'Educativo',
+  'Producto',
+  'Médico / Científico',
+  'Institucional',
+  'Testimonial',
+  'Promocional'
+] as const;
+
+export type PilarType = typeof DEFAULT_PILARES[number] | string;
+
 export interface Post {
   id: string;
   numeroInterno: string; // ej. "01", "02"
   odtId: string;
   clientId: string;
   redSocial: string;
+  pilar?: string; // Pilar temático o de contenido asignado
   fechaPrevista: string; // Fecha programada de publicación
   fechaEntregaMaterial?: string; // Fecha límite de entrega para Arte / Audio y Video
   tipoMaterial: MaterialType;
@@ -212,6 +226,10 @@ export interface Post {
   aprobacionMedicaMaterial?: ApprovalRecord;
   aprobacionInternaFinal?: ApprovalRecord;
   aprobacionClienteMaterial?: ApprovalRecord;
+  requiereRevisionMedica?: boolean; // Permite especificar o ajustar si este post individual requiere validación médica
+  solicitadoPorRole?: 'Corrector' | 'Médico' | 'Cliente' | 'Ejecutivo'; // Rastrear quién solicitó los ajustes para retorno inteligente
+  solicitadoPorName?: string;
+  solicitadoPorUserId?: string;
   requiereRevisionMedicaMaterial?: boolean;
   requiereArtePrevio?: boolean; // Para videos: requiere que Arte diseñe editables/ilustraciones antes de animar (ej. Telefém)
   enlaceEditableArte?: string; // Enlace a recursos editables (Figma, Illustrator, PSD, Drive) subidos por Arte

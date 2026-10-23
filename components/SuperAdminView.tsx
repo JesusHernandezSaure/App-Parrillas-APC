@@ -1,15 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  User, Client, ODT, Post, UserRole, UserPermissions, PostStatus 
+  User, Client, ODT, Post, UserRole, UserPermissions, PostStatus, DEFAULT_PILARES 
 } from '../types';
 import { getDefaultPermissions } from '../services/odtService';
 import { 
   Crown, Users, Building2, Layers, FileText, Plus, Search, Edit3, Trash2, 
   CheckCircle2, XCircle, ShieldCheck, ShieldAlert, Key, Sparkles, Filter, 
   Eye, ArrowRight, UserCheck, Stethoscope, CheckSquare, Palette, Video, 
-  ExternalLink, Lock, Unlock, AlertTriangle, RefreshCw
+  ExternalLink, Lock, Unlock, AlertTriangle, RefreshCw, X
 } from 'lucide-react';
 import { RichTextDisplay, stripHtml } from './RichTextDisplay';
+import { getPilarColor } from './InteractiveCalendarPicker';
 
 interface SuperAdminViewProps {
   currentUser: User;
@@ -72,6 +73,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [clientFormData, setClientFormData] = useState<Partial<Client>>({});
+  const [clientPilarInput, setClientPilarInput] = useState('');
 
   // Offboarding states for user deletions
   const [offboardingUser, setOffboardingUser] = useState<User | null>(null);
@@ -243,9 +245,15 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
   // Manejo de abrir modal cliente
   const handleOpenClientModal = (clientToEdit?: Client) => {
+    setClientPilarInput('');
     if (clientToEdit) {
       setEditingClient(clientToEdit);
-      setClientFormData({ ...clientToEdit });
+      setClientFormData({
+        ...clientToEdit,
+        pilares: (clientToEdit.pilares && clientToEdit.pilares.length > 0)
+          ? [...clientToEdit.pilares]
+          : [...DEFAULT_PILARES]
+      });
     } else {
       const exec = users.find(u => u.role === 'Ejecutivo') || users[0];
       setEditingClient(null);
@@ -259,7 +267,8 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         ejecutivoEmail: exec?.email,
         ejecutivoPhone: exec?.phone,
         clientUserIds: [],
-        createdAt: new Date().toISOString().split('T')[0]
+        createdAt: new Date().toISOString().split('T')[0],
+        pilares: [...DEFAULT_PILARES]
       });
     }
     setIsClientModalOpen(true);
@@ -284,7 +293,10 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
       ejecutivoCargo: selectedExec?.cargo || clientFormData.ejecutivoCargo,
       ejecutivoWhatsapp: selectedExec?.whatsapp || clientFormData.ejecutivoWhatsapp,
       clientUserIds: clientFormData.clientUserIds || [],
-      createdAt: clientFormData.createdAt || new Date().toISOString().split('T')[0]
+      createdAt: clientFormData.createdAt || new Date().toISOString().split('T')[0],
+      pilares: (clientFormData.pilares && clientFormData.pilares.length > 0)
+        ? clientFormData.pilares
+        : [...DEFAULT_PILARES]
     };
     onSaveClient(finalClient);
     setIsClientModalOpen(false);
@@ -1829,6 +1841,106 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                     <option key={u.id} value={u.id}>[{u.role}] {u.name}</option>
                   ))}
                 </select>
+              </div>
+
+              {/* Pilares Oficiales de la Marca (Herencia Cliente -> ODT -> Post) */}
+              <div className="p-3.5 bg-cyan-50/50 rounded-xl border border-cyan-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-cyan-950">
+                    <Layers className="w-4 h-4 text-cyan-700" />
+                    <span>Pilares de Contenido de la Marca *</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-300">
+                    {(clientFormData.pilares || []).length} pilar(es)
+                  </span>
+                </div>
+                <p className="text-[11px] text-cyan-900 leading-tight">
+                  Estos pilares se heredan automáticamente al crear ODTs/parrillas de esta marca y serán las opciones disponibles para el Community al crear posts.
+                </p>
+
+                {/* Lista de tags/pilares */}
+                <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 bg-white rounded-lg border border-cyan-200">
+                  {(clientFormData.pilares || []).length === 0 ? (
+                    <span className="text-[11px] text-slate-400 italic">No hay pilares asignados aún. Agrega uno abajo.</span>
+                  ) : (
+                    (clientFormData.pilares || []).map((pil, idx) => {
+                      const col = getPilarColor(pil);
+                      return (
+                        <span
+                          key={`${pil}-${idx}`}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-2xs ${col.bg} ${col.text} ${col.border}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${col.dot}`}></span>
+                          <span>{pil}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = (clientFormData.pilares || []).filter((_, i) => i !== idx);
+                              setClientFormData(prev => ({ ...prev, pilares: updated }));
+                            }}
+                            className="ml-1 hover:text-rose-600 cursor-pointer"
+                            title="Eliminar pilar"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Formulario rápido para agregar pilar */}
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={clientPilarInput}
+                    onChange={(e) => setClientPilarInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = clientPilarInput.trim();
+                        if (val && !(clientFormData.pilares || []).includes(val)) {
+                          setClientFormData(prev => ({
+                            ...prev,
+                            pilares: [...(prev.pilares || []), val]
+                          }));
+                          setClientPilarInput('');
+                        }
+                      }
+                    }}
+                    placeholder="Nuevo pilar (ej. Folivital / Producto, Educación)"
+                    className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-cyan-500 focus:outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const val = clientPilarInput.trim();
+                      if (val && !(clientFormData.pilares || []).includes(val)) {
+                        setClientFormData(prev => ({
+                          ...prev,
+                          pilares: [...(prev.pilares || []), val]
+                        }));
+                        setClientPilarInput('');
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shrink-0"
+                  >
+                    + Agregar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClientFormData(prev => ({
+                        ...prev,
+                        pilares: [...DEFAULT_PILARES]
+                      }));
+                    }}
+                    className="px-2.5 py-1.5 text-[11px] text-cyan-800 hover:bg-cyan-100 rounded-lg font-medium transition-colors cursor-pointer shrink-0"
+                    title="Cargar pilares estándar genéricos"
+                  >
+                    Restablecer
+                  </button>
+                </div>
               </div>
 
               <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">

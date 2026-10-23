@@ -554,6 +554,7 @@ export const App: React.FC = () => {
       return {
         ...p,
         numeroInterno: (data.numeroInterno !== undefined && data.numeroInterno.trim()) ? data.numeroInterno.trim() : p.numeroInterno,
+        pilar: (data as any).pilar !== undefined ? (data as any).pilar : p.pilar,
         copyIn: data.copyIn !== undefined ? data.copyIn : p.copyIn,
         copyOut: data.copyOut !== undefined ? data.copyOut : p.copyOut,
         enlaceReferencia: data.enlaceReferencia !== undefined ? data.enlaceReferencia : p.enlaceReferencia,
@@ -563,6 +564,10 @@ export const App: React.FC = () => {
         tipoMaterial: data.tipoMaterial !== undefined ? data.tipoMaterial : p.tipoMaterial,
         dimensiones: data.dimensiones !== undefined ? data.dimensiones : p.dimensiones,
         nivelPrioridad: data.nivelPrioridad !== undefined ? data.nivelPrioridad : p.nivelPrioridad,
+        requiereRevisionMedica: (data as any).requiereRevisionMedica !== undefined ? (data as any).requiereRevisionMedica : p.requiereRevisionMedica,
+        areaResponsable: (data as any).areaResponsable !== undefined ? (data as any).areaResponsable : p.areaResponsable,
+        responsableActualId: (data as any).responsableActualId !== undefined ? (data as any).responsableActualId : p.responsableActualId,
+        responsableActualName: (data as any).responsableActualName !== undefined ? (data as any).responsableActualName : p.responsableActualName,
         requiereArtePrevio: data.requiereArtePrevio !== undefined ? data.requiereArtePrevio : p.requiereArtePrevio,
         enlaceEditableArte: data.enlaceEditableArte !== undefined ? data.enlaceEditableArte : p.enlaceEditableArte,
         notasArteParaVideo: data.notasArteParaVideo !== undefined ? data.notasArteParaVideo : p.notasArteParaVideo,
@@ -603,24 +608,57 @@ export const App: React.FC = () => {
     setIsDetailOpen(true);
   };
 
-  // 3. Enviar a Revisión (Community -> Médico o Corrección)
+  // 3. Enviar a Revisión Inteligente (Community -> Revisor específico o Inicio de Cadena)
   const handleSendToReview = (post: Post, odt: ODT) => {
+    const reqMedico = post.requiereRevisionMedica !== undefined ? post.requiereRevisionMedica : odt.requiereMedico;
+
     let nextStatus: PostStatus = 'Corrección de Copy';
     let nextArea = 'Corrección';
-    let nextRespName = odt.correctorName;
-    let nextRespId = odt.correctorId;
+    let nextRespName = odt.correctorName || 'Corrector';
+    let nextRespId = odt.correctorId || '';
+    let routingReason = 'Community completó el copy y envió a revisión';
 
-    if (odt.requiereMedico) {
+    // Retorno inteligente: si los cambios fueron pedidos por Corrector, regresa directo a Corrección
+    if (post.solicitadoPorRole === 'Corrector') {
+      nextStatus = 'Corrección de Copy';
+      nextArea = 'Corrección';
+      nextRespName = odt.correctorName || post.solicitadoPorName || 'Corrector';
+      nextRespId = odt.correctorId || post.solicitadoPorUserId || '';
+      routingReason = `Community ajustó el copy según lo solicitado por Corrección (${post.solicitadoPorName || 'Corrector'}) y devolvió la pieza para su revisión directa.`;
+    }
+    // Si los cambios fueron pedidos por Médico, regresa directo a Médico
+    else if (post.solicitadoPorRole === 'Médico') {
       nextStatus = 'Revisión Médica';
       nextArea = 'Médico';
-      nextRespName = odt.medicoName || 'Médico Responsable';
-      nextRespId = odt.medicoId || '';
+      nextRespName = odt.medicoName || post.solicitadoPorName || 'Médico Responsable';
+      nextRespId = odt.medicoId || post.solicitadoPorUserId || '';
+      routingReason = `Community ajustó el copy según lo solicitado por Área Médica (${post.solicitadoPorName || 'Médico'}) y devolvió la pieza para su validación clínica directa.`;
+    }
+    // Si la solicitud vino del Cliente (o envío nuevo normal): repite el camino completo
+    else {
+      if (reqMedico) {
+        nextStatus = 'Revisión Médica';
+        nextArea = 'Médico';
+        nextRespName = odt.medicoName || 'Médico Responsable';
+        nextRespId = odt.medicoId || '';
+        routingReason = post.solicitadoPorRole === 'Cliente'
+          ? 'Reinicio de ciclo completo tras solicitud de cambios del Cliente: enviado a revisión médica inicial.'
+          : 'Community completó el copy y envió a revisión médica obligatoria.';
+      } else {
+        nextStatus = 'Corrección de Copy';
+        nextArea = 'Corrección';
+        nextRespName = odt.correctorName || 'Corrector';
+        nextRespId = odt.correctorId || '';
+        routingReason = post.solicitadoPorRole === 'Cliente'
+          ? 'Reinicio de ciclo completo tras solicitud de cambios del Cliente: enviado a corrección de estilo.'
+          : 'Community completó el copy y envió a corrección de estilo.';
+      }
     }
 
     const intervention = createIntervention(
       currentUser,
       `Envío a ${nextStatus}`,
-      'Community completó el copy y envió a revisión obligatoria',
+      routingReason,
       post.estado,
       nextStatus
     );
@@ -629,10 +667,14 @@ export const App: React.FC = () => {
       if (p.id !== post.id) return p;
       return {
         ...p,
+        ...post, // Conservar los textos editados de copyIn, copyOut, enlaceReferencia, pilar, etc.
         estado: nextStatus,
         areaResponsable: nextArea,
         responsableActualName: nextRespName,
         responsableActualId: nextRespId,
+        solicitadoPorRole: undefined, // Limpiar rastreo activo una vez devuelto
+        solicitadoPorName: undefined,
+        solicitadoPorUserId: undefined,
         historial: [intervention, ...p.historial],
         updatedAt: getNowTimestamp()
       };
@@ -700,11 +742,17 @@ export const App: React.FC = () => {
         nextArea = 'Corrección';
         nextRespName = odt.correctorName;
         nextRespId = odt.correctorId;
+        patch.solicitadoPorRole = undefined;
+        patch.solicitadoPorName = undefined;
+        patch.solicitadoPorUserId = undefined;
       } else {
         nextStatus = 'Ajustes de Copy';
         nextArea = 'Community';
         nextRespName = odt.communityName;
         nextRespId = odt.communityId;
+        patch.solicitadoPorRole = 'Médico';
+        patch.solicitadoPorName = currentUser.name;
+        patch.solicitadoPorUserId = currentUser.id;
       }
     } else if (type === 'correccion_copy') {
       patch.aprobacionCorreccionCopy = approvalRecord;
@@ -713,15 +761,24 @@ export const App: React.FC = () => {
         nextArea = 'Ejecutivo';
         nextRespName = odt.ejecutivoName;
         nextRespId = odt.ejecutivoId;
+        patch.solicitadoPorRole = undefined;
+        patch.solicitadoPorName = undefined;
+        patch.solicitadoPorUserId = undefined;
       } else {
         nextStatus = 'Ajustes de Copy';
         nextArea = 'Community';
         nextRespName = odt.communityName;
         nextRespId = odt.communityId;
+        patch.solicitadoPorRole = 'Corrector';
+        patch.solicitadoPorName = currentUser.name;
+        patch.solicitadoPorUserId = currentUser.id;
       }
     } else if (type === 'cliente_copy') {
       patch.aprobacionClienteCopy = approvalRecord;
       if (isApproved) {
+        patch.solicitadoPorRole = undefined;
+        patch.solicitadoPorName = undefined;
+        patch.solicitadoPorUserId = undefined;
         if (isAudioVisual(post.tipoMaterial) && post.requiereArtePrevio) {
           nextStatus = 'Diseño de Editables (Arte)';
           nextArea = 'Arte';
@@ -743,10 +800,16 @@ export const App: React.FC = () => {
         nextArea = 'Ejecutivo';
         nextRespName = odt.ejecutivoName;
         nextRespId = odt.ejecutivoId;
+        patch.solicitadoPorRole = 'Cliente';
+        patch.solicitadoPorName = currentUser.name;
+        patch.solicitadoPorUserId = currentUser.id;
       }
     } else if (type === 'correccion_material') {
       patch.aprobacionCorreccionMaterial = approvalRecord;
       if (isApproved) {
+        patch.solicitadoPorRole = undefined;
+        patch.solicitadoPorName = undefined;
+        patch.solicitadoPorUserId = undefined;
         if (extraOptions?.requiereRevisionMedica) {
           nextStatus = 'Revisión Médica Material';
           nextArea = 'Médico';
@@ -761,6 +824,9 @@ export const App: React.FC = () => {
         }
       } else {
         // Corrector solicita cambios: regresa a producción (Arte o Video)
+        patch.solicitadoPorRole = 'Corrector';
+        patch.solicitadoPorName = currentUser.name;
+        patch.solicitadoPorUserId = currentUser.id;
         if (isAudioVisual(post.tipoMaterial)) {
           nextStatus = 'Producción Audio/Video';
           nextArea = 'Audio y Video';
@@ -776,12 +842,18 @@ export const App: React.FC = () => {
     } else if (type === 'medico_material') {
       patch.aprobacionMedicaMaterial = approvalRecord;
       if (isApproved) {
+        patch.solicitadoPorRole = undefined;
+        patch.solicitadoPorName = undefined;
+        patch.solicitadoPorUserId = undefined;
         nextStatus = 'Aprobación Interna Final';
         nextArea = 'Ejecutivo';
         nextRespName = odt.ejecutivoName;
         nextRespId = odt.ejecutivoId;
       } else {
         // Médico solicita ajustes de claims o información médica en el material
+        patch.solicitadoPorRole = 'Médico';
+        patch.solicitadoPorName = currentUser.name;
+        patch.solicitadoPorUserId = currentUser.id;
         if (isAudioVisual(post.tipoMaterial)) {
           nextStatus = 'Producción Audio/Video';
           nextArea = 'Audio y Video';
@@ -797,12 +869,18 @@ export const App: React.FC = () => {
     } else if (type === 'aprobacion_interna_final') {
       patch.aprobacionInternaFinal = approvalRecord;
       if (isApproved) {
+        patch.solicitadoPorRole = undefined;
+        patch.solicitadoPorName = undefined;
+        patch.solicitadoPorUserId = undefined;
         nextStatus = 'Listo para Publicar';
         nextArea = 'Community';
         nextRespName = odt.communityName;
         nextRespId = odt.communityId;
       } else {
         // Ejecutivo devuelve para correcciones antes de publicar
+        patch.solicitadoPorRole = 'Ejecutivo';
+        patch.solicitadoPorName = currentUser.name;
+        patch.solicitadoPorUserId = currentUser.id;
         if (isAudioVisual(post.tipoMaterial)) {
           nextStatus = 'Producción Audio/Video';
           nextArea = 'Audio y Video';
@@ -818,11 +896,17 @@ export const App: React.FC = () => {
     } else if (type === 'cliente_material') {
       patch.aprobacionClienteMaterial = approvalRecord;
       if (isApproved) {
+        patch.solicitadoPorRole = undefined;
+        patch.solicitadoPorName = undefined;
+        patch.solicitadoPorUserId = undefined;
         nextStatus = 'Listo para Publicar';
         nextArea = 'Community';
         nextRespName = odt.communityName;
         nextRespId = odt.communityId;
       } else {
+        patch.solicitadoPorRole = 'Cliente';
+        patch.solicitadoPorName = currentUser.name;
+        patch.solicitadoPorUserId = currentUser.id;
         nextStatus = 'Cambios solicitados por Cliente';
         nextArea = 'Ejecutivo';
         nextRespName = odt.ejecutivoName;
@@ -830,11 +914,17 @@ export const App: React.FC = () => {
       }
     } else if (type === 'esperando_ejecutivo') {
       if (isApproved) {
+        patch.solicitadoPorRole = undefined;
+        patch.solicitadoPorName = undefined;
+        patch.solicitadoPorUserId = undefined;
         nextStatus = 'Aprobación Copy Cliente';
         nextArea = 'Cliente';
         nextRespName = 'Cliente';
         nextRespId = odt.clientId;
       } else {
+        patch.solicitadoPorRole = 'Ejecutivo';
+        patch.solicitadoPorName = currentUser.name;
+        patch.solicitadoPorUserId = currentUser.id;
         nextStatus = 'Ajustes de Copy';
         nextArea = 'Community';
         nextRespName = odt.communityName;
@@ -1275,6 +1365,9 @@ export const App: React.FC = () => {
           areaResponsable: nextArea,
           responsableActualName: nextRespName,
           responsableActualId: nextRespId,
+          solicitadoPorRole: 'Cliente',
+          solicitadoPorName: currentUser.name,
+          solicitadoPorUserId: currentUser.id,
           ...(tipo === 'COPY' 
             ? { aprobacionClienteCopy: disapprovalRecord } 
             : { aprobacionClienteMaterial: disapprovalRecord }
@@ -1812,6 +1905,7 @@ export const App: React.FC = () => {
           post={activeModalPost}
           odt={odts.find(o => o.id === activeModalPost.odtId)}
           currentUser={currentUser}
+          posts={posts}
           initialEditMode={detailInitialEditMode}
           onClose={() => {
             setIsDetailOpen(false);
@@ -1888,6 +1982,7 @@ export const App: React.FC = () => {
           odt={createPostOdt}
           existingPostsCount={posts.filter(p => p.odtId === createPostOdt.id).length}
           currentUser={currentUser}
+          posts={posts}
           onClose={() => {
             setIsCreatePostOpen(false);
             setCreatePostOdt(null);

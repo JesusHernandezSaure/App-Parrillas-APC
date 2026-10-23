@@ -247,7 +247,8 @@ export const INITIAL_CLIENTS: Client[] = [
     clientUserIds: ['u-cliente-demo'],
     status: 'Activo',
     createdAt: '2026-10-12',
-    industry: 'Farmacéutica Ácido Fólico'
+    industry: 'Farmacéutica Ácido Fólico',
+    pilares: ['Folivital / Producto', 'Educación Médica', 'Mitos y Realidades', 'Testimoniales', 'Consejos Ginecológicos']
   },
   {
     id: 'c-chinoin-01',
@@ -262,7 +263,8 @@ export const INITIAL_CLIENTS: Client[] = [
     clientUserIds: ['u-cliente-demo'],
     status: 'Activo',
     createdAt: '2026-10-14',
-    industry: 'Salud y Alivio Respiratorio'
+    industry: 'Salud y Alivio Respiratorio',
+    pilares: ['Prevención Gripe', 'Síntomas y Alivio', 'Estilo de Vida Saludable', 'Ciencia Antiflu-Des', 'Interacción con Audiencia']
   }
 ];
 
@@ -296,7 +298,8 @@ export const INITIAL_ODTS: ODT[] = [
     editorAvName: 'Audio y Video (Editor A/V)',
     estadoGeneral: 'En Creación',
     createdAt: '2026-10-12',
-    rondasAprobacion: []
+    rondasAprobacion: [],
+    pilares: ['Folivital / Producto', 'Educación Médica', 'Mitos y Realidades', 'Testimoniales', 'Consejos Ginecológicos']
   },
   {
     id: 'odt-chinoin-33370',
@@ -327,7 +330,8 @@ export const INITIAL_ODTS: ODT[] = [
     editorAvName: 'Audio y Video (Editor A/V)',
     estadoGeneral: 'En Aprobación',
     createdAt: '2026-10-14',
-    rondasAprobacion: []
+    rondasAprobacion: [],
+    pilares: ['Prevención Gripe', 'Síntomas y Alivio', 'Estilo de Vida Saludable', 'Ciencia Antiflu-Des', 'Interacción con Audiencia']
   }
 ];
 

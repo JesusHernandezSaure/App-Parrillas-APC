@@ -232,12 +232,16 @@ export function getStoredClients(): Client[] {
       return init ? {
         ...init,
         ...c,
+        pilares: (Array.isArray(c.pilares) && c.pilares.length > 0) ? c.pilares : (init.pilares || []),
         ejecutivoCargo: c.ejecutivoCargo || init.ejecutivoCargo,
         ejecutivoEmail: c.ejecutivoEmail || init.ejecutivoEmail,
         ejecutivoPhone: c.ejecutivoPhone || init.ejecutivoPhone,
         ejecutivoWhatsapp: c.ejecutivoWhatsapp || init.ejecutivoWhatsapp,
         ejecutivoHorario: c.ejecutivoHorario || init.ejecutivoHorario
-      } : c;
+      } : {
+        ...c,
+        pilares: Array.isArray(c.pilares) ? c.pilares : []
+      };
     });
   } catch (e) {
     return INITIAL_CLIENTS;
@@ -288,12 +292,28 @@ export function getStoredOdts(): ODT[] {
       }
     }
 
-    const sanitized = healedList.map(o => ({
-      ...o,
-      redesSociales: Array.isArray(o.redesSociales) && o.redesSociales.length > 0
-        ? o.redesSociales
-        : ['Instagram', 'Facebook', 'LinkedIn']
-    }));
+    const clientList = getStoredClients();
+    const clientMap = new Map(clientList.map(c => [c.id, c]));
+
+    const sanitized = healedList.map(o => {
+      const cli = clientMap.get(o.clientId);
+      const initOdt = initialMap.get(o.id);
+      const inheritedPilares = (Array.isArray(o.pilares) && o.pilares.length > 0)
+        ? o.pilares
+        : (initOdt?.pilares && initOdt.pilares.length > 0)
+        ? initOdt.pilares
+        : (cli?.pilares && cli.pilares.length > 0)
+        ? cli.pilares
+        : undefined;
+
+      return {
+        ...o,
+        pilares: inheritedPilares,
+        redesSociales: Array.isArray(o.redesSociales) && o.redesSociales.length > 0
+          ? o.redesSociales
+          : ['Instagram', 'Facebook', 'LinkedIn']
+      };
+    });
 
     if (wasHealed) {
       localStorage.setItem(ODTS_KEY, JSON.stringify(sanitized));
@@ -482,6 +502,9 @@ export function recyclePost(
     aprobacionMedicaMaterial: undefined,
     aprobacionInternaFinal: undefined,
     aprobacionClienteMaterial: undefined,
+    solicitadoPorRole: undefined,
+    solicitadoPorName: undefined,
+    solicitadoPorUserId: undefined,
     publicado: false,
     fechaRealPublicacion: undefined,
     urlPublicacion: undefined,

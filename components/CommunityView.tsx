@@ -8,6 +8,7 @@ import {
 import { EjecutivoView } from './EjecutivoView';
 import { RichTextDisplay } from './RichTextDisplay';
 import { PostContentFourPanels } from './PostContentFourPanels';
+import { getPilarColor } from './InteractiveCalendarPicker';
 
 interface CommunityViewProps {
   odts: ODT[];
@@ -148,6 +149,17 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       (scopeFilter === 'all' || isPostAssignedToCommunity(p))
     );
   }, [posts, odts, currentUser, scopeFilter]);
+
+  // Balance de pilares para contabilizar los tipos de post en la bandeja activa
+  const pilarBalance = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const targetPosts = activeTab === 'todo' ? pendingActionPosts : communityPosts;
+    targetPosts.forEach(p => {
+      const pil = p.pilar || 'Sin pilar';
+      counts[pil] = (counts[pil] || 0) + 1;
+    });
+    return counts;
+  }, [activeTab, pendingActionPosts, communityPosts]);
 
   return (
     <div className="space-y-6">
@@ -352,6 +364,11 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                         <span className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 font-bold text-xs">
                           {post.redSocial}
                         </span>
+                        {post.pilar && (
+                          <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold border ${getPilarColor(post.pilar).bg} ${getPilarColor(post.pilar).text} ${getPilarColor(post.pilar).border}`}>
+                            Pilar: {post.pilar}
+                          </span>
+                        )}
                         {isProgramado ? (
                           <span className="px-2.5 py-0.5 rounded-full bg-violet-100 text-violet-900 font-extrabold text-xs flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5" />
@@ -465,18 +482,59 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             </div>
           </div>
 
-          {/* Banner de alerta si hay posts devueltos por el cliente */}
-          {pendingActionPosts.filter(p => p.estado === 'Cambios solicitados por Cliente' || p.aprobacionClienteCopy?.status === 'Cambios Solicitados' || p.aprobacionClienteMaterial?.status === 'Cambios Solicitados').length > 0 && (
-            <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-950 flex items-start gap-3 shadow-2xs">
-              <div className="p-2 rounded-xl bg-rose-600 text-white shrink-0 mt-0.5">
+          {/* Balance de Pilares de las publicaciones */}
+          {Object.keys(pilarBalance).length > 0 && (
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Balance de Pilares en esta bandeja:
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {Object.entries(pilarBalance).map(([pil, count]) => {
+                  const col = getPilarColor(pil);
+                  return (
+                    <span
+                      key={pil}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-bold border flex items-center gap-1.5 ${col.bg} ${col.text} ${col.border}`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${col.dot}`}></span>
+                      <span>{pil}:</span>
+                      <strong className="font-black text-slate-900">{count}</strong>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Banner de alerta si hay posts devueltos con observaciones o cambios solicitados */}
+          {pendingActionPosts.filter(p => 
+            p.estado === 'Ajustes de Copy' || 
+            p.estado === 'Cambios solicitados por Cliente' || 
+            p.solicitadoPorRole !== undefined ||
+            p.aprobacionCorreccionCopy?.status === 'Cambios Solicitados' || 
+            p.aprobacionMedica?.status === 'Cambios Solicitados' ||
+            p.aprobacionClienteCopy?.status === 'Cambios Solicitados'
+          ).length > 0 && (
+            <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex items-start gap-3 shadow-2xs">
+              <div className="p-2 rounded-xl bg-amber-600 text-white shrink-0 mt-0.5">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div className="text-xs space-y-1">
-                <p className="font-black text-sm text-rose-950">
-                  {pendingActionPosts.filter(p => p.estado === 'Cambios solicitados por Cliente' || p.aprobacionClienteCopy?.status === 'Cambios Solicitados' || p.aprobacionClienteMaterial?.status === 'Cambios Solicitados').length} publicación(es) con Cambios Solicitados por el Cliente
+                <p className="font-black text-sm text-amber-950">
+                  {pendingActionPosts.filter(p => 
+                    p.estado === 'Ajustes de Copy' || 
+                    p.estado === 'Cambios solicitados por Cliente' || 
+                    p.solicitadoPorRole !== undefined ||
+                    p.aprobacionCorreccionCopy?.status === 'Cambios Solicitados' || 
+                    p.aprobacionMedica?.status === 'Cambios Solicitados' ||
+                    p.aprobacionClienteCopy?.status === 'Cambios Solicitados'
+                  ).length} publicación(es) con Observaciones o Cambios Solicitados
                 </p>
-                <p className="text-rose-800 leading-relaxed">
-                  El cliente ha dejado observaciones directas en estas piezas. Ajusta el copy según sus notas y pulsa <strong>"Enviar a Médico"</strong> o <strong>"Enviar a Corrección"</strong> para reiniciar el ciclo de aprobación interna.
+                <p className="text-amber-900 leading-relaxed">
+                  Revisa las notas dejadas por el revisor asignado (Corrector, Médico o Cliente). Al terminar tus ajustes, pulsa el botón de envío para devolver la pieza directo a quien solicitó los ajustes (o reiniciar el ciclo completo si provino del cliente).
                 </p>
               </div>
             </div>
@@ -491,21 +549,76 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             <div className="grid grid-cols-1 gap-3">
               {pendingActionPosts.map(post => {
                 const odt = odts.find(o => o.id === post.odtId);
-                const isClientChange = post.estado === 'Cambios solicitados por Cliente' || post.aprobacionClienteCopy?.status === 'Cambios Solicitados' || post.aprobacionClienteMaterial?.status === 'Cambios Solicitados';
-                const isChanges = post.estado === 'Ajustes de Copy' || isClientChange;
+                const isClientChange = post.estado === 'Cambios solicitados por Cliente' || post.aprobacionClienteCopy?.status === 'Cambios Solicitados' || post.aprobacionClienteMaterial?.status === 'Cambios Solicitados' || post.solicitadoPorRole === 'Cliente';
+                const isChanges = post.estado === 'Ajustes de Copy' || isClientChange || post.solicitadoPorRole !== undefined;
 
-                // Extraer el comentario más reciente del cliente
-                const clientObservation = 
-                  post.aprobacionClienteCopy?.comment || 
-                  post.aprobacionClienteMaterial?.comment || 
-                  post.comentarios.find(c => c.text.includes('[Revisión') || c.userRole === 'Cliente')?.text ||
-                  (post.comentarios.length > 0 ? post.comentarios[0]?.text : null);
+                // Extraer dinámicamente la observación y el perfil exacto que solicitó ajustes
+                const getObservationData = () => {
+                  if (post.solicitadoPorRole === 'Corrector' || post.aprobacionCorreccionCopy?.status === 'Cambios Solicitados') {
+                    return {
+                      label: `Comentario de Corrector (${post.aprobacionCorreccionCopy?.user || post.solicitadoPorName || 'Corrector'})`,
+                      comment: post.aprobacionCorreccionCopy?.comment || 'Se requieren ajustes ortotipográficos o de redacción.',
+                      theme: 'amber' as const
+                    };
+                  }
+                  if (post.solicitadoPorRole === 'Médico' || post.aprobacionMedica?.status === 'Cambios Solicitados') {
+                    return {
+                      label: `Comentario de Médico (${post.aprobacionMedica?.user || post.solicitadoPorName || 'Médico Responsable'})`,
+                      comment: post.aprobacionMedica?.comment || 'Se requieren ajustes clínicos o de rigor médico.',
+                      theme: 'blue' as const
+                    };
+                  }
+                  if (post.solicitadoPorRole === 'Cliente' || isClientChange) {
+                    const clientComment = 
+                      post.aprobacionClienteCopy?.comment || 
+                      post.aprobacionClienteMaterial?.comment || 
+                      post.comentarios.find(c => c.text.includes('[Revisión') || c.userRole === 'Cliente')?.text;
+                    return {
+                      label: `Comentario de Cliente (${post.aprobacionClienteCopy?.user || post.aprobacionClienteMaterial?.user || post.solicitadoPorName || 'Cliente'})`,
+                      comment: clientComment || 'Se requieren ajustes solicitados por el cliente.',
+                      theme: 'rose' as const
+                    };
+                  }
+                  if (post.solicitadoPorRole === 'Ejecutivo') {
+                    return {
+                      label: `Comentario de Ejecutivo (${post.solicitadoPorName || 'Ejecutivo'})`,
+                      comment: 'Se requieren ajustes previos a presentar al cliente.',
+                      theme: 'amber' as const
+                    };
+                  }
+                  // Si no hay solicitud formal pero hay comentarios registrados
+                  if (post.estado === 'Ajustes de Copy' && post.comentarios.length > 0) {
+                    const lastC = post.comentarios[post.comentarios.length - 1];
+                    return {
+                      label: `Comentario de ${lastC.userRole} (${lastC.userName})`,
+                      comment: lastC.text,
+                      theme: 'amber' as const
+                    };
+                  }
+                  return null;
+                };
+
+                const obsData = getObservationData();
+
+                // Botón de reenvío dinámico inteligente
+                const getButtonText = () => {
+                  if (post.solicitadoPorRole === 'Corrector') return 'Regresar a Corrección';
+                  if (post.solicitadoPorRole === 'Médico') return 'Regresar a Médico';
+                  const reqMed = post.requiereRevisionMedica !== undefined ? post.requiereRevisionMedica : odt?.requiereMedico;
+                  return reqMed ? 'Enviar a Médico' : 'Enviar a Corrección';
+                };
 
                 return (
                   <div
                     key={post.id}
                     className={`bg-white rounded-2xl p-5 border shadow-2xs space-y-3 transition-all ${
-                      isClientChange ? 'border-2 border-rose-400/80 bg-rose-50/20' : 'border-slate-200'
+                      obsData?.theme === 'rose'
+                        ? 'border-2 border-rose-400/80 bg-rose-50/20'
+                        : obsData?.theme === 'blue'
+                        ? 'border-2 border-blue-400/80 bg-blue-50/20'
+                        : isChanges
+                        ? 'border-2 border-amber-300 bg-amber-50/20'
+                        : 'border-slate-200'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -516,6 +629,11 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                         <span className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 font-bold text-xs">
                           {post.redSocial}
                         </span>
+                        {post.pilar && (
+                          <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold border ${getPilarColor(post.pilar).bg} ${getPilarColor(post.pilar).text} ${getPilarColor(post.pilar).border}`}>
+                            Pilar: {post.pilar}
+                          </span>
+                        )}
                         <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold text-xs">
                           {post.tipoMaterial}
                         </span>
@@ -538,13 +656,15 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                           Publicación: {post.fechaPrevista}
                         </span>
                         <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold border flex items-center gap-1 ${
-                          isClientChange 
-                            ? 'bg-rose-100 text-rose-800 border-rose-300 font-black animate-pulse' 
+                          obsData?.theme === 'rose'
+                            ? 'bg-rose-100 text-rose-800 border-rose-300 font-black' 
+                            : obsData?.theme === 'blue'
+                            ? 'bg-blue-100 text-blue-800 border-blue-300 font-bold'
                             : isChanges 
-                              ? 'bg-amber-50 text-amber-800 border-amber-300' 
-                              : 'bg-slate-100 text-slate-700 border-slate-200'
+                            ? 'bg-amber-50 text-amber-800 border-amber-300' 
+                            : 'bg-slate-100 text-slate-700 border-slate-200'
                         }`}>
-                          {isClientChange && <AlertTriangle className="w-3 h-3 text-rose-600" />}
+                          {isChanges && <AlertTriangle className="w-3 h-3 text-amber-600" />}
                           {post.estado}
                         </span>
                       </div>
@@ -608,7 +728,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                             className="px-4 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                           >
                             <Send className="w-3.5 h-3.5" />
-                            {odt.requiereMedico ? 'Enviar a Médico' : 'Enviar a Corrección'}
+                            {getButtonText()}
                           </button>
                         )}
                       </div>
@@ -621,15 +741,25 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       canEdit={true}
                     />
 
-                    {clientObservation && (
-                      <div className="p-3.5 rounded-xl bg-amber-50 border-2 border-amber-300 text-xs text-amber-950 flex items-start gap-2.5 shadow-2xs">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    {obsData && (
+                      <div className={`p-3.5 rounded-xl border-2 text-xs flex items-start gap-2.5 shadow-2xs ${
+                        obsData.theme === 'rose'
+                          ? 'bg-rose-50 border-rose-300 text-rose-950'
+                          : obsData.theme === 'blue'
+                          ? 'bg-blue-50 border-blue-300 text-blue-950'
+                          : 'bg-amber-50 border-amber-300 text-amber-950'
+                      }`}>
+                        <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${
+                          obsData.theme === 'rose' ? 'text-rose-600' : obsData.theme === 'blue' ? 'text-blue-600' : 'text-amber-600'
+                        }`} />
                         <div className="flex-1 min-w-0">
-                          <span className="font-bold text-amber-900 block mb-0.5">
-                            Observación del Cliente ({post.aprobacionClienteCopy?.user || post.aprobacionClienteMaterial?.user || 'Cliente'}):
+                          <span className={`font-bold block mb-0.5 ${
+                            obsData.theme === 'rose' ? 'text-rose-900' : obsData.theme === 'blue' ? 'text-blue-900' : 'text-amber-900'
+                          }`}>
+                            {obsData.label}:
                           </span>
-                          <p className="italic text-amber-950 font-medium leading-relaxed">
-                            "{clientObservation}"
+                          <p className="italic font-medium leading-relaxed">
+                            "{obsData.comment}"
                           </p>
                         </div>
                       </div>
