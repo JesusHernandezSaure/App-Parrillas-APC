@@ -28,6 +28,7 @@ interface SuperAdminViewProps {
   onDeletePost: (postId: string) => void;
   onSelectPost: (post: Post) => void;
   onOpenCreateOdt: () => void;
+  onOpenEditOdt?: (odt: ODT) => void;
   onOpenCreatePost: (odt: ODT) => void;
   onSwitchUser: (user: User) => void;
   onSuperApprovePost: (post: Post) => void;
@@ -51,6 +52,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   onDeletePost,
   onSelectPost,
   onOpenCreateOdt,
+  onOpenEditOdt,
   onOpenCreatePost,
   onSwitchUser,
   onSuperApprovePost,
@@ -846,6 +848,16 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
                           <td className="py-3.5 px-4 text-right">
                             <div className="inline-flex items-center gap-1.5">
+                              {onOpenEditOdt && (
+                                <button
+                                  onClick={() => onOpenEditOdt(odt)}
+                                  title="Editar ODT / Parrilla"
+                                  className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Editar</span>
+                                </button>
+                              )}
                               <button
                                 onClick={() => onOpenCreatePost(odt)}
                                 title="Crear Post en esta ODT"

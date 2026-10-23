@@ -164,6 +164,7 @@ export const App: React.FC = () => {
   const [isInterventionOpen, setIsInterventionOpen] = useState(false);
   const [isCreateOdtOpen, setIsCreateOdtOpen] = useState(false);
   const [createOdtInitialClientId, setCreateOdtInitialClientId] = useState<string | undefined>();
+  const [editingOdt, setEditingOdt] = useState<ODT | null>(null);
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [createPostOdt, setCreatePostOdt] = useState<ODT | null>(null);
 
@@ -508,11 +509,18 @@ export const App: React.FC = () => {
 
   // HANDLERS DEL WORKFLOW Y MÁQUINA DE ESTADOS
 
-  // 1. Crear nueva ODT
+  // 1. Crear o Editar ODT
+  const handleOpenEditOdt = (odt: ODT) => {
+    setEditingOdt(odt);
+    setCreateOdtInitialClientId(odt.clientId);
+    setIsCreateOdtOpen(true);
+  };
+
   const handleCreateOdt = (newOdt: ODT) => {
     const updated = [newOdt, ...odts];
     updateOdtsState(updated);
     setIsCreateOdtOpen(false);
+    setEditingOdt(null);
     setSelectedClientId(newOdt.clientId);
     setSelectedOdtId(newOdt.id);
   };
@@ -1710,9 +1718,11 @@ export const App: React.FC = () => {
               setIsDetailOpen(true);
             }}
             onOpenCreateOdt={() => {
+              setEditingOdt(null);
               setCreateOdtInitialClientId(undefined);
               setIsCreateOdtOpen(true);
             }}
+            onOpenEditOdt={handleOpenEditOdt}
             onOpenCreatePost={(odt) => {
               setCreatePostOdt(odt);
               setIsCreatePostOpen(true);
@@ -1744,9 +1754,11 @@ export const App: React.FC = () => {
             onSelectClient={setSelectedClientId}
             onSelectOdt={setSelectedOdtId}
             onOpenCreateOdt={(cid) => {
+              setEditingOdt(null);
               setCreateOdtInitialClientId(cid);
               setIsCreateOdtOpen(true);
             }}
+            onOpenEditOdt={handleOpenEditOdt}
             onOpenCreatePost={(odt) => {
               setCreatePostOdt(odt);
               setIsCreatePostOpen(true);
@@ -1793,6 +1805,7 @@ export const App: React.FC = () => {
               setCreatePostOdt(odt);
               setIsCreatePostOpen(true);
             }}
+            onOpenEditOdt={handleOpenEditOdt}
             onSelectPost={(post, startEditing?: boolean) => {
               setActiveModalPost(post);
               setDetailInitialEditMode(Boolean(startEditing !== undefined ? startEditing : (post.estado === 'Ajustes de Copy' || post.estado === 'En Community' || post.estado === 'Borrador' || post.estado === 'Cambios solicitados por Cliente')));
@@ -1964,15 +1977,29 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* 5. Modal Crear Nueva ODT */}
+      {/* 5. Modal Crear o Editar ODT */}
       {isCreateOdtOpen && (
         <CreateOdtModal
           clients={clients}
           users={users}
           currentUser={currentUser}
           initialClientId={createOdtInitialClientId}
-          onClose={() => setIsCreateOdtOpen(false)}
+          odtToEdit={editingOdt || undefined}
+          onClose={() => {
+            setIsCreateOdtOpen(false);
+            setEditingOdt(null);
+          }}
           onCreate={handleCreateOdt}
+          onSave={(updatedOdt) => {
+            handleSaveOdt(updatedOdt);
+            setIsCreateOdtOpen(false);
+            setEditingOdt(null);
+          }}
+          onDelete={(odtId) => {
+            handleDeleteOdt(odtId);
+            setIsCreateOdtOpen(false);
+            setEditingOdt(null);
+          }}
         />
       )}
 

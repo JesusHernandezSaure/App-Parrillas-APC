@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ODT, Client, User, DEFAULT_PILARES } from '../types';
-import { Layers, X, Plus, Calendar, CheckSquare, Sparkles } from 'lucide-react';
+import { Layers, X, Plus, Calendar, CheckSquare, Sparkles, Save, Edit3, Trash2 } from 'lucide-react';
 import { getPilarColor } from './InteractiveCalendarPicker';
 
 interface CreateOdtModalProps {
@@ -10,6 +10,9 @@ interface CreateOdtModalProps {
   onClose: () => void;
   onCreate: (newOdt: ODT) => void;
   initialClientId?: string;
+  odtToEdit?: ODT;
+  onSave?: (updatedOdt: ODT) => void;
+  onDelete?: (odtId: string) => void;
 }
 
 const SOCIAL_OPTIONS = ['Instagram', 'Facebook', 'LinkedIn', 'TikTok', 'X (Twitter)', 'YouTube'];
@@ -20,35 +23,49 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
   currentUser,
   onClose,
   onCreate,
-  initialClientId
+  initialClientId,
+  odtToEdit,
+  onSave,
+  onDelete
 }) => {
-  const [clientId, setClientId] = useState(initialClientId || (clients[0]?.id || ''));
-  const [numeroODT, setNumeroODT] = useState(`ODT-2026-00${Math.floor(Math.random() * 900 + 100)}`);
-  const [nombreParrilla, setNombreParrilla] = useState('');
+  const isEditing = Boolean(odtToEdit);
+
+  const [clientId, setClientId] = useState(odtToEdit?.clientId || initialClientId || (clients[0]?.id || ''));
+  const [numeroODT, setNumeroODT] = useState(odtToEdit?.numeroODT || `ODT-2026-00${Math.floor(Math.random() * 900 + 100)}`);
+  const [nombreParrilla, setNombreParrilla] = useState(odtToEdit?.nombreParrilla || '');
   
-  // Pilares de contenido heredados del cliente seleccionado
+  // Pilares de contenido heredados de la ODT o del cliente seleccionado
   const [pilares, setPilares] = useState<string[]>(() => {
+    if (odtToEdit?.pilares && odtToEdit.pilares.length > 0) {
+      return [...odtToEdit.pilares];
+    }
     const cli = clients.find(c => c.id === (initialClientId || clients[0]?.id));
     return (cli?.pilares && cli.pilares.length > 0) ? [...cli.pilares] : [...DEFAULT_PILARES];
   });
   const [pilarInput, setPilarInput] = useState('');
   const [mesPeriodo, setMesPeriodo] = useState(() => {
+    if (odtToEdit?.mesPeriodo) return odtToEdit.mesPeriodo;
     const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     const now = new Date();
     return `${months[now.getMonth()]} ${now.getFullYear()}`;
   });
-  const [brief, setBrief] = useState('');
-  const [objetivo, setObjetivo] = useState('');
-  const [redesSociales, setRedesSociales] = useState<string[]>(['Instagram', 'Facebook']);
+  const [brief, setBrief] = useState(odtToEdit?.brief || '');
+  const [objetivo, setObjetivo] = useState(odtToEdit?.objetivo || '');
+  const [redesSociales, setRedesSociales] = useState<string[]>(
+    odtToEdit?.redesSociales && odtToEdit.redesSociales.length > 0 
+      ? odtToEdit.redesSociales 
+      : ['Instagram', 'Facebook']
+  );
   
-  const [fechaInicio, setFechaInicio] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaInicio, setFechaInicio] = useState(odtToEdit?.fechaInicio || new Date().toISOString().split('T')[0]);
   const [fechaObjetivo, setFechaObjetivo] = useState(
-    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    odtToEdit?.fechaObjetivo || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
 
-  const [requiereMedico, setRequiereMedico] = useState(false);
-  const [requiereArte, setRequiereArte] = useState(true);
-  const [requiereAudioVideo, setRequiereAudioVideo] = useState(true);
+  const [requiereMedico, setRequiereMedico] = useState(odtToEdit ? Boolean(odtToEdit.requiereMedico) : false);
+  const [requiereArte, setRequiereArte] = useState(odtToEdit ? Boolean(odtToEdit.requiereArte) : true);
+  const [requiereAudioVideo, setRequiereAudioVideo] = useState(odtToEdit ? Boolean(odtToEdit.requiereAudioVideo) : true);
+  const [estadoGeneral, setEstadoGeneral] = useState<ODT['estadoGeneral']>(odtToEdit?.estadoGeneral || 'En Creación');
 
   // Responsables (admite rol principal y roles secundarios/compartidos)
   const communityUsers = users.filter(u => u.role === 'Community' || u.role === 'Admin' || u.secondaryRoles?.includes('Community'));
@@ -57,11 +74,11 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
   const arteUsers = users.filter(u => u.role === 'Arte' || u.role === 'Admin' || u.secondaryRoles?.includes('Arte'));
   const avUsers = users.filter(u => u.role === 'Audio y Video' || u.role === 'Admin' || u.secondaryRoles?.includes('Audio y Video'));
 
-  const [communityId, setCommunityId] = useState(communityUsers[0]?.id || '');
-  const [correctorId, setCorrectorId] = useState(correctorUsers[0]?.id || '');
-  const [medicoId, setMedicoId] = useState(medicoUsers[0]?.id || '');
-  const [disenadorId, setDisenadorId] = useState(arteUsers[0]?.id || '');
-  const [editorAvId, setEditorAvId] = useState(avUsers[0]?.id || '');
+  const [communityId, setCommunityId] = useState(odtToEdit?.communityId || communityUsers[0]?.id || '');
+  const [correctorId, setCorrectorId] = useState(odtToEdit?.correctorId || correctorUsers[0]?.id || '');
+  const [medicoId, setMedicoId] = useState(odtToEdit?.medicoId || medicoUsers[0]?.id || '');
+  const [disenadorId, setDisenadorId] = useState(odtToEdit?.disenadorId || arteUsers[0]?.id || '');
+  const [editorAvId, setEditorAvId] = useState(odtToEdit?.editorAvId || avUsers[0]?.id || '');
 
   const toggleSocial = (social: string) => {
     setRedesSociales(prev => 
@@ -72,10 +89,12 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
   const handleClientChange = (newClientId: string) => {
     setClientId(newClientId);
     const cli = clients.find(c => c.id === newClientId);
-    if (cli?.pilares && cli.pilares.length > 0) {
-      setPilares([...cli.pilares]);
-    } else {
-      setPilares([...DEFAULT_PILARES]);
+    if (!isEditing) {
+      if (cli?.pilares && cli.pilares.length > 0) {
+        setPilares([...cli.pilares]);
+      } else {
+        setPilares([...DEFAULT_PILARES]);
+      }
     }
   };
 
@@ -88,39 +107,47 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
     const artUser = requiereArte ? users.find(u => u.id === disenadorId) : undefined;
     const avUser = requiereAudioVideo ? users.find(u => u.id === editorAvId) : undefined;
 
-    const newOdt: ODT = {
-      id: 'odt-' + Date.now(),
+    const finalOdt: ODT = {
+      ...(odtToEdit || {}),
+      id: odtToEdit?.id || ('odt-' + Date.now()),
       numeroODT: numeroODT.trim(),
       clientId,
-      clientName: selectedClient ? selectedClient.name : 'Cliente',
+      clientName: selectedClient ? selectedClient.name : (odtToEdit?.clientName || 'Cliente'),
       nombreParrilla: nombreParrilla.trim(),
       mesPeriodo: mesPeriodo.trim(),
       brief: brief.trim(),
       objetivo: objetivo.trim(),
       redesSociales,
       pilares: (pilares && pilares.length > 0) ? pilares : (selectedClient?.pilares || [...DEFAULT_PILARES]),
-      ejecutivoId: currentUser.id,
-      ejecutivoName: currentUser.name,
+      ejecutivoId: odtToEdit?.ejecutivoId || currentUser.id,
+      ejecutivoName: odtToEdit?.ejecutivoName || currentUser.name,
       fechaInicio,
       fechaObjetivo,
       requiereMedico,
       requiereArte,
       requiereAudioVideo,
       communityId,
-      communityName: commUser ? commUser.name : 'Community Manager',
+      communityName: commUser ? commUser.name : (odtToEdit?.communityName || 'Community Manager'),
       correctorId,
-      correctorName: corrUser ? corrUser.name : 'Corrector',
+      correctorName: corrUser ? corrUser.name : (odtToEdit?.correctorName || 'Corrector'),
       medicoId: requiereMedico ? medicoId : undefined,
-      medicoName: medUser ? medUser.name : undefined,
+      medicoName: requiereMedico ? (medUser ? medUser.name : odtToEdit?.medicoName) : undefined,
       disenadorId: requiereArte ? disenadorId : undefined,
-      disenadorName: artUser ? artUser.name : undefined,
+      disenadorName: requiereArte ? (artUser ? artUser.name : odtToEdit?.disenadorName) : undefined,
       editorAvId: requiereAudioVideo ? editorAvId : undefined,
-      editorAvName: avUser ? avUser.name : undefined,
-      estadoGeneral: 'En Creación',
-      createdAt: new Date().toISOString().split('T')[0]
+      editorAvName: requiereAudioVideo ? (avUser ? avUser.name : odtToEdit?.editorAvName) : undefined,
+      estadoGeneral: estadoGeneral,
+      createdAt: odtToEdit?.createdAt || new Date().toISOString().split('T')[0],
+      rondasAprobacion: odtToEdit?.rondasAprobacion || [],
+      estadoAprobacionCopy: odtToEdit?.estadoAprobacionCopy,
+      estadoAprobacionMaterial: odtToEdit?.estadoAprobacionMaterial
     };
 
-    onCreate(newOdt);
+    if (odtToEdit && onSave) {
+      onSave(finalOdt);
+    } else {
+      onCreate(finalOdt);
+    }
   };
 
   return (
@@ -134,8 +161,19 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
               <Layers className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900">Crear Nueva ODT / Parrilla de Contenidos</h2>
-              <p className="text-xs text-slate-500">Parámetros operativos y asignación de equipo para APC</p>
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span>{isEditing ? `Editar ODT / Parrilla: ${odtToEdit?.numeroODT}` : 'Crear Nueva ODT / Parrilla de Contenidos'}</span>
+                {isEditing && (
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                    Modo Edición
+                  </span>
+                )}
+              </h2>
+              <p className="text-xs text-slate-500">
+                {isEditing 
+                  ? 'Actualiza brief, pilares, requerimientos, fechas y equipo asignado a esta parrilla' 
+                  : 'Parámetros operativos y asignación de equipo para APC'}
+              </p>
             </div>
           </div>
           <button
@@ -150,7 +188,7 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5 flex-1">
           
           {/* Identificación */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={`grid grid-cols-1 ${isEditing ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
             <div>
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
                 Número de ODT *
@@ -202,6 +240,26 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
                 <option value="Marzo 2027" />
               </datalist>
             </div>
+
+            {isEditing && (
+              <div>
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
+                  Estado de la ODT *
+                </label>
+                <select
+                  className="w-full text-sm font-semibold px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                  value={estadoGeneral}
+                  onChange={(e) => setEstadoGeneral(e.target.value as ODT['estadoGeneral'])}
+                >
+                  <option value="En Creación">🟡 En Creación (Community)</option>
+                  <option value="En Producción">🎨 En Producción (Arte / Video)</option>
+                  <option value="En Aprobación">🔍 En Aprobación (Revisión / Cliente)</option>
+                  <option value="Listo para Publicar">🚀 Listo para Publicar</option>
+                  <option value="Completado">✅ Completado al 100%</option>
+                  <option value="Pausado">⏸️ Pausado</option>
+                </select>
+              </div>
+            )}
           </div>
 
           <div>
@@ -534,21 +592,50 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
           </div>
 
           {/* Submit */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Crear ODT y Parrilla
-            </button>
+          <div className="flex items-center justify-between pt-4 border-t border-slate-100 flex-wrap gap-3">
+            <div>
+              {isEditing && onDelete && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`¿Estás seguro de que deseas eliminar la ODT "${odtToEdit?.nombreParrilla}" y todos sus posts asociados? Esta acción no se puede deshacer.`)) {
+                      onDelete(odtToEdit!.id);
+                      onClose();
+                    }
+                  }}
+                  className="px-3.5 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer border border-rose-200"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar ODT</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                {isEditing ? (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Guardar Cambios de la ODT</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    <span>Crear ODT y Parrilla</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
         </form>

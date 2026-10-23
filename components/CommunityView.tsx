@@ -20,6 +20,7 @@ interface CommunityViewProps {
   onSelectClient?: (clientId: string | null) => void;
   onSelectOdt?: (odtId: string | null) => void;
   onOpenCreatePost: (odt: ODT) => void;
+  onOpenEditOdt?: (odt: ODT) => void;
   onSelectPost: (post: Post, startEditing?: boolean) => void;
   onSendToReview: (post: Post, odt: ODT) => void;
   onOpenPublishModal: (post: Post) => void;
@@ -42,6 +43,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   onSelectClient,
   onSelectOdt,
   onOpenCreatePost,
+  onOpenEditOdt,
   onSelectPost,
   onSendToReview,
   onOpenPublishModal,
@@ -299,6 +301,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             onSelectClient={handleSelectClient}
             onSelectOdt={handleSelectOdt}
             onOpenCreateOdt={() => {}}
+            onOpenEditOdt={onOpenEditOdt}
             onOpenCreatePost={onOpenCreatePost}
             onSelectPost={onSelectPost}
             onOpenIntervention={onOpenIntervention || (() => {})}
