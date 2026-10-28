@@ -805,9 +805,9 @@ export const App: React.FC = () => {
         }
       } else {
         nextStatus = 'Cambios solicitados por Cliente';
-        nextArea = 'Ejecutivo';
-        nextRespName = odt.ejecutivoName;
-        nextRespId = odt.ejecutivoId;
+        nextArea = 'Community';
+        nextRespName = odt.communityName || 'Community Manager';
+        nextRespId = odt.communityId || '';
         patch.solicitadoPorRole = 'Cliente';
         patch.solicitadoPorName = currentUser.name;
         patch.solicitadoPorUserId = currentUser.id;
@@ -1455,6 +1455,20 @@ export const App: React.FC = () => {
     updatePostsState(updatedPosts);
   };
 
+  // 12. Acciones individuales directas del Cliente (por post)
+  const handleClientApproveSinglePost = (post: Post, comment?: string) => {
+    handleApprovalDecision(post, 'cliente_copy', true, comment || 'Publicación autorizada individualmente por el cliente.');
+  };
+
+  const handleClientRequestChangeSinglePost = (post: Post, comment: string) => {
+    handleApprovalDecision(post, 'cliente_copy', false, comment);
+    const targetOdt = odts.find(o => o.id === post.odtId);
+    if (targetOdt && targetOdt.estadoAprobacionCopy !== 'Cambios Solicitados') {
+      const updatedOdts = odts.map(o => o.id === targetOdt.id ? { ...o, estadoAprobacionCopy: 'Cambios Solicitados' as const } : o);
+      updateOdtsState(updatedOdts);
+    }
+  };
+
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanUser = loginUsername.trim().toLowerCase();
@@ -1901,6 +1915,8 @@ export const App: React.FC = () => {
             users={users}
             onBatchApproveParrilla={handleBatchApproveParrilla}
             onBatchRequestChanges={handleBatchRequestChanges}
+            onApproveSinglePost={handleClientApproveSinglePost}
+            onRequestChangeSinglePost={handleClientRequestChangeSinglePost}
             onSelectPost={(post) => {
               setActiveModalPost(post);
               setIsDetailOpen(true);

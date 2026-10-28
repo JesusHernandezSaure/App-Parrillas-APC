@@ -5,7 +5,7 @@ import {
   MessageSquare, History, Sparkles, Send, Check, AlertCircle,
   Phone, Mail, MessageCircle, Clock, UserCheck, ExternalLink,
   Copy, CheckCheck, X, ChevronRight, ChevronLeft, Eye,
-  ChevronDown, Layers
+  ChevronDown, Layers, Calendar
 } from 'lucide-react';
 import { 
   checkParrillaCopyReadiness, 
@@ -30,6 +30,8 @@ interface ClienteViewProps {
     affectedPosts: { postId: string; comment: string }[]
   ) => void;
   onSelectPost?: (post: Post) => void;
+  onApproveSinglePost?: (post: Post, comment?: string) => void;
+  onRequestChangeSinglePost?: (post: Post, comment: string) => void;
 }
 
 export const ClienteView: React.FC<ClienteViewProps> = ({
@@ -41,7 +43,10 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
   currentUser,
   users,
   onBatchApproveParrilla,
-  onBatchRequestChanges
+  onBatchRequestChanges,
+  onSelectPost,
+  onApproveSinglePost,
+  onRequestChangeSinglePost
 }) => {
   // Filtro estricto por cliente
   const clientOdts = useMemo(() => {
@@ -215,11 +220,8 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
     };
   }, [users, activeOdt, client]);
 
-  // Estados para modal de contacto y acciones rápidas
-  const [isContactModalOpen, setIsContactModalOpen] = useState<boolean>(false);
+  // Estado para copiar correo u otros datos
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [quickMessage, setQuickMessage] = useState<string>('');
-  const [quickMessageSent, setQuickMessageSent] = useState<boolean>(false);
 
   const handleCopy = (text: string, field: string) => {
     if (navigator?.clipboard?.writeText) {
@@ -227,17 +229,6 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
     }
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2500);
-  };
-
-  const handleSendQuickMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quickMessage.trim()) return;
-    setQuickMessageSent(true);
-    setTimeout(() => {
-      setQuickMessage('');
-      setQuickMessageSent(false);
-      setIsContactModalOpen(false);
-    }, 2500);
   };
 
   // Estados interactivos para decisiones por post y comentarios
@@ -324,6 +315,107 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
       ...prev,
       [postId]: comment
     }));
+  };
+
+  // Notificación de confirmación tras acción directa
+  const [successNotif, setSuccessNotif] = useState<{ postId: string; message: string; type: 'change' | 'approved' } | null>(null);
+
+  // Enviar cambio de un post individual directamente al Community Manager
+  const handleSendSinglePostChange = (post: Post) => {
+    const comment = (postChanges[post.id] || '').trim();
+    if (!comment) {
+      alert('Por favor escribe los ajustes o comentarios que necesitas en esta publicación.');
+      return;
+    }
+
+    if (onRequestChangeSinglePost) {
+      onRequestChangeSinglePost(post, comment);
+    } else if (activeOdt) {
+      onBatchRequestChanges(activeOdt.id, 'COPY', '', [{ postId: post.id, comment }]);
+    }
+
+    // Limpiar borrador local
+    setPostChanges(prev => {
+      const next = { ...prev };
+      delete next[post.id];
+      return next;
+    });
+
+    setSuccessNotif({
+      postId: post.id,
+      message: `¡Observación enviada al Community Manager! El post #${post.numeroInterno} pasó a Ajustes de Copy.`,
+      type: 'change'
+    });
+    setTimeout(() => setSuccessNotif(null), 4500);
+  };
+
+  // Aprobar un post individual directamente
+  const handleDirectApprovePost = (post: Post) => {
+    if (onApproveSinglePost) {
+      onApproveSinglePost(post);
+    } else {
+      handleMarkApproved(post.id);
+    }
+
+    // Limpiar borrador local si existía
+    setPostChanges(prev => {
+      const next = { ...prev };
+      delete next[post.id];
+      return next;
+    });
+
+    setSuccessNotif({
+      postId: post.id,
+      message: `¡Post #${post.numeroInterno} autorizado exitosamente!`,
+      type: 'approved'
+    });
+    setTimeout(() => setSuccessNotif(null), 3500);
+  };
+
+  // Modal: Aprobar post actual y avanzar de inmediato al siguiente sin cerrarse
+  const handleModalApproveAndNext = (post: Post) => {
+    handleDirectApprovePost(post);
+    if (viewingPostIndex < odtPosts.length - 1) {
+      setViewingPost(odtPosts[viewingPostIndex + 1]);
+    } else {
+      setViewingPost(null);
+    }
+  };
+
+  // Modal: Enviar cambio del post actual al Community Manager y avanzar de inmediato al siguiente
+  const handleModalSubmitChangeAndNext = (post: Post) => {
+    const comment = (modalComment || postChanges[post.id] || '').trim();
+    if (!comment) {
+      alert('Por favor describe los ajustes que necesitas en esta publicación.');
+      return;
+    }
+
+    if (onRequestChangeSinglePost) {
+      onRequestChangeSinglePost(post, comment);
+    } else if (activeOdt) {
+      onBatchRequestChanges(activeOdt.id, 'COPY', '', [{ postId: post.id, comment }]);
+    }
+
+    setModalComment('');
+    setIsModalChangeActive(false);
+    setPostChanges(prev => {
+      const next = { ...prev };
+      delete next[post.id];
+      return next;
+    });
+
+    setSuccessNotif({
+      postId: post.id,
+      message: `¡Observación enviada al Community Manager! El post #${post.numeroInterno} pasó a Ajustes de Copy.`,
+      type: 'change'
+    });
+    setTimeout(() => setSuccessNotif(null), 4500);
+
+    if (viewingPostIndex < odtPosts.length - 1) {
+      setViewingPost(odtPosts[viewingPostIndex + 1]);
+    } else {
+      setViewingPost(null);
+    }
   };
 
   // Limpiar todas las observaciones y marcar todo listo
@@ -612,11 +704,11 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
             </div>
           </div>
 
-          {/* Acciones directas de comunicación */}
+          {/* Acciones directas de comunicación: WhatsApp, Teléfono y Correo */}
           <div className="flex items-center gap-2 flex-wrap">
             {ejecutivoUser.whatsapp && (
               <a
-                href={`https://wa.me/${ejecutivoUser.whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${ejecutivoUser.name.split(' ')[0]}, te escribo desde el portal de ${client.name} sobre la parrilla: ${activeOdt.nombreParrilla}.`)}`}
+                href={`https://wa.me/${ejecutivoUser.whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${ejecutivoUser.name.split(' ')[0]}, te escribo desde el portal de ${client.name} sobre la parrilla: ${activeOdt?.nombreParrilla || 'Contenidos'}.`)}`}
                 target="_blank"
                 rel="noreferrer"
                 className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
@@ -639,24 +731,33 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
             )}
 
             {ejecutivoUser.email && (
-              <a
-                href={`mailto:${ejecutivoUser.email}?subject=Consulta Parrilla ${encodeURIComponent(activeOdt.nombreParrilla)}`}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-colors"
-                title={`Enviar correo electrónico a ${ejecutivoUser.email}`}
-              >
-                <Mail className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="hidden sm:inline">{ejecutivoUser.email}</span>
-                <span className="sm:hidden">Email</span>
-              </a>
+              <div className="inline-flex items-center rounded-xl bg-slate-800 border border-slate-700 overflow-hidden shadow-xs">
+                <a
+                  href={`mailto:${ejecutivoUser.email}?subject=${encodeURIComponent(`Consulta Parrilla: ${activeOdt?.nombreParrilla || 'Contenidos'} (${client.name})`)}`}
+                  className="px-3 py-1.5 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  title={`Enviar correo electrónico directo a ${ejecutivoUser.email}`}
+                >
+                  <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">{ejecutivoUser.email}</span>
+                  <span className="sm:hidden">Correo</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(ejecutivoUser.email, 'email')}
+                  className="px-2 py-1.5 hover:bg-slate-700 text-slate-400 hover:text-white border-l border-slate-700 transition-colors"
+                  title="Copiar correo al portapapeles"
+                >
+                  {copiedField === 'email' ? (
+                    <span className="flex items-center gap-1 text-emerald-400 text-[10px] font-bold">
+                      <Check className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Copiado</span>
+                    </span>
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
             )}
-
-            <button
-              onClick={() => setIsContactModalOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Ver Ficha Completa</span>
-            </button>
           </div>
         </div>
       </div>
@@ -863,10 +964,10 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
             <div className="flex items-center gap-2 flex-wrap shrink-0">
               {ejecutivoUser.whatsapp && (
                 <a
-                  href={`https://wa.me/${ejecutivoUser.whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${ejecutivoUser.name.split(' ')[0]}, te contacto desde el portal de ${client.name} sobre la parrilla: ${activeOdt.nombreParrilla}.`)}`}
+                  href={`https://wa.me/${ejecutivoUser.whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${ejecutivoUser.name.split(' ')[0]}, te contacto desde el portal de ${client.name} sobre la parrilla: ${activeOdt?.nombreParrilla || 'Contenidos'}.`)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors"
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
                   title="Abrir chat en WhatsApp"
                 >
                   <MessageCircle className="w-4 h-4" />
@@ -877,7 +978,7 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
               {ejecutivoUser.phone && (
                 <a
                   href={`tel:${ejecutivoUser.phone.replace(/[^0-9+]/g, '')}`}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors"
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
                   title={`Llamar al ${ejecutivoUser.phone}`}
                 >
                   <Phone className="w-4 h-4 text-emerald-400" />
@@ -886,26 +987,56 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
               )}
 
               {ejecutivoUser.email && (
-                <a
-                  href={`mailto:${ejecutivoUser.email}?subject=Consulta Parrilla ${encodeURIComponent(activeOdt.nombreParrilla)}`}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors"
-                  title={`Enviar correo a ${ejecutivoUser.email}`}
-                >
-                  <Mail className="w-4 h-4 text-cyan-400" />
-                  <span className="hidden xl:inline">{ejecutivoUser.email}</span>
-                  <span className="xl:hidden">Correo</span>
-                </a>
+                <div className="inline-flex items-center rounded-xl bg-slate-800 border border-slate-600 shadow-2xs overflow-hidden">
+                  <a
+                    href={`mailto:${ejecutivoUser.email}?subject=${encodeURIComponent(`Consulta Parrilla: ${activeOdt?.nombreParrilla || 'Contenidos'}`)}`}
+                    className="px-3.5 py-2 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                    title={`Enviar correo a ${ejecutivoUser.email}`}
+                  >
+                    <Mail className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>{ejecutivoUser.email}</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(ejecutivoUser.email || '', 'email')}
+                    className="px-2.5 py-2 hover:bg-slate-700 text-slate-400 hover:text-cyan-300 border-l border-slate-700 text-xs font-medium transition-colors cursor-pointer"
+                    title="Copiar dirección de correo"
+                  >
+                    {copiedField === 'email' ? (
+                      <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
               )}
-
-              <button
-                onClick={() => setIsContactModalOpen(true)}
-                className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-              >
-                <UserCheck className="w-4 h-4" />
-                <span>Ficha & Mensaje</span>
-              </button>
             </div>
           </div>
+
+          {/* Notificación de acción individual */}
+          {successNotif && (
+            <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 text-xs font-bold transition-all shadow-xs animate-in fade-in duration-200 ${
+              successNotif.type === 'approved' 
+                ? 'bg-emerald-50 text-emerald-900 border-emerald-300' 
+                : 'bg-amber-50 text-amber-900 border-amber-300'
+            }`}>
+              <div className="flex items-center gap-2">
+                {successNotif.type === 'approved' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <Send className="w-4 h-4 text-amber-600 shrink-0" />
+                )}
+                <span>{successNotif.message}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSuccessNotif(null)}
+                className="p-1 hover:bg-black/5 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* Tabla Condensada o Estado Vacío */}
           {odtPosts.length === 0 ? (
@@ -940,12 +1071,10 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
-                      <th className="p-3 w-32">Número</th>
-                      <th className="p-3 w-28">Red Social</th>
-                      <th className="p-3 w-28">Fecha Prevista</th>
-                      <th className="p-3">Copy In</th>
-                      <th className="p-3">Copy Out</th>
-                      <th className="p-3 w-56 text-right">Revisión de Copy</th>
+                      <th className="p-3 w-44">Publicación</th>
+                      <th className="p-3 w-[36%] min-w-[200px]">Copy In</th>
+                      <th className="p-3 w-[36%] min-w-[200px]">Copy Out</th>
+                      <th className="p-3 w-36 text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -955,103 +1084,131 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                       const isPendingClient = statusInfo?.isPendingClient;
                       const hasChange = post.id in postChanges;
                       const isApproved = Boolean(explicitlyApproved[post.id]);
+                      const isChangeRequested = post.estado === 'Cambios solicitados por Cliente';
 
                       return (
                         <React.Fragment key={post.id}>
                           <tr className={`hover:bg-slate-50/80 transition-colors ${
                             hasChange ? 'bg-amber-50/60' : isApproved ? 'bg-emerald-50/30' : isPendingClient ? 'bg-amber-50/20' : ''
                           }`}>
-                            <td className="p-3 font-mono font-bold text-slate-900 align-top">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-800">
-                                  {post.numeroInterno}
-                                </span>
-                                {isPendingClient && approvedPostsCount > 0 && (
-                                  <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
-                                    Nuevo
+                            {/* Columna Vertical de Metadatos de la Publicación */}
+                            <td className="p-3 align-top">
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className="px-2 py-0.5 rounded-md bg-slate-900 text-white font-mono text-[11px] font-bold tracking-tight">
+                                    {post.numeroInterno}
+                                  </span>
+                                  {isPendingClient && approvedPostsCount > 0 && (
+                                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                                      Nuevo
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                                    {post.redSocial}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+                                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span>{post.fechaPrevista}</span>
+                                </div>
+                                {post.tipoMaterial && (
+                                  <span className="text-[10px] text-slate-400 font-medium truncate max-w-[130px]" title={post.tipoMaterial}>
+                                    {post.tipoMaterial}
                                   </span>
                                 )}
                               </div>
                             </td>
-                            <td className="p-3 align-top font-semibold text-indigo-700">
-                              {post.redSocial}
-                            </td>
-                            <td className="p-3 align-top text-slate-500 font-medium">
-                              {post.fechaPrevista}
-                            </td>
+
+                            {/* Columna Copy In con salto de línea y ancho controlado */}
                             <td className="p-3 align-top text-slate-800 leading-relaxed font-medium">
-                              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 max-h-56 overflow-y-auto break-words">
                                 <RichTextDisplay content={post.copyIn} fallbackText="Sin copy in" showCopyButton copyButtonLabel="Copiar" />
                               </div>
                             </td>
+
+                            {/* Columna Copy Out con salto de línea y ancho controlado */}
                             <td className="p-3 align-top text-slate-700 leading-relaxed">
-                              <div className="bg-slate-50/60 p-2.5 rounded-lg border border-slate-200/60">
+                              <div className="bg-slate-50/60 p-2.5 rounded-lg border border-slate-200/60 max-h-56 overflow-y-auto break-words">
                                 <RichTextDisplay content={post.copyOut} fallbackText="Sin copy out" showCopyButton copyButtonLabel="Copiar" />
                               </div>
                             </td>
-                            <td className="p-3 align-top text-right">
-                              <div className="flex flex-col items-end gap-2">
-                                {/* Botón "Ver post completo" ubicado ARRIBA de las acciones de decisión */}
+
+                            {/* Columna Acciones Verticales y Compactas */}
+                            <td className="p-3 align-top">
+                              <div className="flex flex-col gap-1.5 w-full">
+                                {/* Botón "Ver post completo" */}
                                 <button
                                   type="button"
                                   onClick={() => setViewingPost(post)}
-                                  className="w-full sm:w-auto px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs hover:shadow-xs"
-                                  title="Abrir vista detallada sin edición para revisar con comodidad y navegar entre publicaciones"
+                                  className="w-full px-2 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer shadow-2xs hover:shadow-xs"
+                                  title="Abrir vista detallada para revisar cómodamente"
                                 >
-                                  <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                                  <span>Ver post completo</span>
+                                  <Eye className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                  <span>Ver completo</span>
                                 </button>
 
-                                {/* Decisiones rápidas: Estado dictaminado o botones de acción */}
+                                {/* Decisiones de Estado */}
                                 {isPostApproved ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-xs">
-                                    <Check className="w-3.5 h-3.5" /> Aprobado
-                                  </span>
+                                  <div className="w-full py-1.5 px-2 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center gap-1 border border-emerald-300">
+                                    <Check className="w-3.5 h-3.5 text-emerald-700" />
+                                    <span>Aprobado</span>
+                                  </div>
+                                ) : isChangeRequested ? (
+                                  <div className="w-full py-1.5 px-2 rounded-lg bg-amber-100 text-amber-900 font-bold text-xs flex items-center justify-center gap-1 border border-amber-300">
+                                    <Clock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                    <span>En Ajustes</span>
+                                  </div>
                                 ) : hasChange ? (
-                                  <div className="flex flex-col items-end gap-1">
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-amber-100 border border-amber-300 text-amber-900 font-bold text-[11px]">
-                                      <MessageSquare className="w-3 h-3 text-amber-700" /> Con cambios
+                                  <div className="flex flex-col gap-1 w-full">
+                                    <span className="w-full text-center py-1 px-1.5 rounded-md bg-amber-100 border border-amber-300 text-amber-900 font-bold text-[11px] flex items-center justify-center gap-1">
+                                      <MessageSquare className="w-3 h-3 text-amber-700" />
+                                      <span>Editando nota</span>
                                     </span>
                                     <button
                                       type="button"
-                                      onClick={() => handleMarkApproved(post.id)}
-                                      className="text-[11px] text-slate-500 hover:text-emerald-700 font-semibold underline transition-colors cursor-pointer"
+                                      onClick={() => handleDirectApprovePost(post)}
+                                      className="text-[10px] text-center text-slate-500 hover:text-emerald-700 font-semibold underline transition-colors cursor-pointer"
                                     >
-                                      Marcar aprobado
+                                      Aprobar post
                                     </button>
                                   </div>
                                 ) : isApproved ? (
-                                  <div className="flex flex-col items-end gap-1">
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-[11px]">
-                                      <Check className="w-3 h-3 text-emerald-700" /> Listo para aprobar
+                                  <div className="flex flex-col gap-1 w-full">
+                                    <span className="w-full text-center py-1 px-1.5 rounded-md bg-emerald-100 border border-emerald-300 text-emerald-800 font-bold text-[11px] flex items-center justify-center gap-1">
+                                      <Check className="w-3 h-3 text-emerald-700" />
+                                      <span>Listo p/ aprobar</span>
                                     </span>
                                     <button
                                       type="button"
                                       onClick={() => handleRequestChange(post.id)}
-                                      className="text-[11px] text-slate-500 hover:text-amber-700 font-semibold underline transition-colors cursor-pointer"
+                                      className="text-[10px] text-center text-slate-500 hover:text-amber-700 font-semibold underline transition-colors cursor-pointer"
                                     >
                                       Pedir cambio
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className="flex items-center justify-end gap-1.5">
+                                  <>
                                     <button
                                       type="button"
-                                      onClick={() => handleMarkApproved(post.id)}
-                                      className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                                      onClick={() => handleDirectApprovePost(post)}
+                                      className="w-full px-2 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
                                       title="Aprobar el copy de este post directamente"
                                     >
-                                      <Check className="w-3.5 h-3.5" /> Aprobar
+                                      <Check className="w-3.5 h-3.5" />
+                                      <span>Aprobar</span>
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => handleRequestChange(post.id)}
-                                      className="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                                      className="w-full px-2 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
                                       title="Solicitar cambios en este post"
                                     >
-                                      <MessageSquare className="w-3.5 h-3.5" /> Cambios
+                                      <MessageSquare className="w-3.5 h-3.5 text-amber-700" />
+                                      <span>Cambios</span>
                                     </button>
-                                  </div>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -1060,18 +1217,24 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                           {/* Observación contextual para este post si se seleccionó para cambio */}
                           {!isPostApproved && hasChange && (
                             <tr className="bg-amber-50/80 border-b border-amber-200">
-                              <td colSpan={6} className="p-3.5 pl-6 sm:pl-10">
-                                <div className="space-y-1.5 max-w-3xl">
+                              <td colSpan={4} className="p-3.5 pl-6 sm:pl-8">
+                                <div className="space-y-2 max-w-2xl">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-[11px] font-bold text-amber-950 flex items-center gap-1">
+                                    <span className="text-[11px] font-bold text-amber-950 flex items-center gap-1.5">
                                       <MessageSquare className="w-3.5 h-3.5 text-amber-700" />
-                                      Observación específica para el Post {post.numeroInterno} ({post.redSocial}):
+                                      Observación para el Post {post.numeroInterno} ({post.redSocial}):
                                     </span>
                                     <button
-                                      onClick={() => handleMarkApproved(post.id)}
-                                      className="text-[11px] text-slate-500 hover:text-amber-900 font-medium underline cursor-pointer"
+                                      onClick={() => {
+                                        setPostChanges(prev => {
+                                          const next = { ...prev };
+                                          delete next[post.id];
+                                          return next;
+                                        });
+                                      }}
+                                      className="text-[11px] text-slate-500 hover:text-slate-800 font-medium underline cursor-pointer"
                                     >
-                                      Cancelar y marcar aprobado
+                                      Cancelar
                                     </button>
                                   </div>
                                   <textarea
@@ -1079,8 +1242,22 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                                     value={postChanges[post.id] || ''}
                                     onChange={(e) => updatePostChangeComment(post.id, e.target.value)}
                                     placeholder="Escribe aquí los ajustes que necesitas en el copy in, copy out o llamada a la acción..."
-                                    className="w-full text-xs p-2.5 rounded-xl border border-amber-300 bg-white text-slate-800 focus:ring-1 focus:ring-amber-500 placeholder:text-slate-400"
+                                    className="w-full text-xs p-2.5 rounded-xl border border-amber-300 bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 placeholder:text-slate-400 focus:outline-hidden"
+                                    autoFocus
                                   />
+                                  <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+                                    <span className="text-[11px] text-amber-800">
+                                      Al enviar, el post pasará directamente al Community Manager para su ajuste.
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSendSinglePostChange(post)}
+                                      className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                                    >
+                                      <Send className="w-3.5 h-3.5" />
+                                      <span>Enviar cambio a Community</span>
+                                    </button>
+                                  </div>
                                 </div>
                               </td>
                             </tr>
@@ -1433,217 +1610,6 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: FICHA COMPLETA DE CONTACTO CON TU EJECUTIVO DE CUENTA               */}
-      {/* ========================================================================= */}
-      {isContactModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 space-y-0">
-            {/* Header del Modal */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-950 p-6 text-white relative">
-              <button
-                onClick={() => setIsContactModalOpen(false)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                title="Cerrar ventana"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="flex items-center gap-4">
-                <div className="relative shrink-0">
-                  {ejecutivoUser.avatar ? (
-                    <img
-                      src={ejecutivoUser.avatar}
-                      alt={ejecutivoUser.name}
-                      className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 shadow-md"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-2xl bg-cyan-700 text-white font-black flex items-center justify-center text-xl border-2 border-cyan-400 shadow-md">
-                      {ejecutivoUser.name.substring(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-slate-900" title="Disponible" />
-                </div>
-
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300 bg-cyan-950 px-2 py-0.5 rounded-md border border-cyan-800">
-                      Ejecutivo Asignado
-                    </span>
-                    <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                      Disponible
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-bold text-white">{ejecutivoUser.name}</h3>
-                  <p className="text-xs text-slate-300">{ejecutivoUser.cargo}</p>
-                  <p className="text-[11px] text-cyan-200">
-                    Marca: <strong>{client.name}</strong> • Parrilla: <strong>{activeOdt.nombreParrilla}</strong>
-                  </p>
-                </div>
-              </div>
-
-              {/* Botones de acción principal en el header */}
-              <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-700/60">
-                {ejecutivoUser.whatsapp && (
-                  <a
-                    href={`https://wa.me/${ejecutivoUser.whatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${ejecutivoUser.name.split(' ')[0]}, te escribo desde el portal de ${client.name} sobre la parrilla: ${activeOdt.nombreParrilla}.`)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>WhatsApp</span>
-                  </a>
-                )}
-
-                {ejecutivoUser.phone && (
-                  <a
-                    href={`tel:${ejecutivoUser.phone.replace(/[^0-9+]/g, '')}`}
-                    className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 border border-slate-700 transition-colors"
-                  >
-                    <Phone className="w-4 h-4 text-emerald-400" />
-                    <span>Llamar</span>
-                  </a>
-                )}
-
-                {ejecutivoUser.email && (
-                  <a
-                    href={`mailto:${ejecutivoUser.email}?subject=Consulta Parrilla ${encodeURIComponent(activeOdt.nombreParrilla)}`}
-                    className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 border border-slate-700 transition-colors"
-                  >
-                    <Mail className="w-4 h-4 text-cyan-400" />
-                    <span>Email</span>
-                  </a>
-                )}
-              </div>
-            </div>
-
-            {/* Cuerpo del Modal: Datos Detallados de Contacto */}
-            <div className="p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Teléfono */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-emerald-600" /> Teléfono Directo
-                  </span>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-900">{ejecutivoUser.phone || 'No disponible'}</span>
-                    {ejecutivoUser.phone && (
-                      <button
-                        onClick={() => handleCopy(ejecutivoUser.phone || '', 'phone')}
-                        className="text-xs text-cyan-700 hover:text-cyan-800 font-semibold p-1 hover:bg-cyan-50 rounded cursor-pointer"
-                        title="Copiar teléfono"
-                      >
-                        {copiedField === 'phone' ? <CheckCheck className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Correo Electrónico */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                    <Mail className="w-3.5 h-3.5 text-cyan-600" /> Correo Electrónico
-                  </span>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-900 truncate max-w-[170px]" title={ejecutivoUser.email}>
-                      {ejecutivoUser.email}
-                    </span>
-                    {ejecutivoUser.email && (
-                      <button
-                        onClick={() => handleCopy(ejecutivoUser.email || '', 'email')}
-                        className="text-xs text-cyan-700 hover:text-cyan-800 font-semibold p-1 hover:bg-cyan-50 rounded cursor-pointer"
-                        title="Copiar correo"
-                      >
-                        {copiedField === 'email' ? <CheckCheck className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Horario de Atención */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-amber-600" /> Horario Habitual
-                  </span>
-                  <p className="text-xs font-bold text-slate-900 leading-snug">
-                    {ejecutivoUser.horarioAtencion}
-                  </p>
-                </div>
-
-                {/* Tiempo Estimado de Respuesta */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> Nivel de Servicio (SLA)
-                  </span>
-                  <p className="text-xs font-bold text-slate-900 leading-snug">
-                    &lt; 15 min en horario hábil
-                  </p>
-                </div>
-              </div>
-
-              {/* Formulario de Mensaje Rápido Directo */}
-              <div className="pt-2 border-t border-slate-100">
-                <form onSubmit={handleSendQuickMessage} className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <Send className="w-3.5 h-3.5 text-cyan-700" />
-                      Enviar Nota o Solicitud de Llamada a {ejecutivoUser.name.split(' ')[0]}:
-                    </label>
-                  </div>
-
-                  {quickMessageSent ? (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div>
-                        <strong>¡Mensaje enviado con éxito!</strong> Tu ejecutiva {ejecutivoUser.name} ha recibido tu nota y te contactará a la brevedad.
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <textarea
-                        rows={2}
-                        value={quickMessage}
-                        onChange={(e) => setQuickMessage(e.target.value)}
-                        placeholder={`Ej: Hola ${ejecutivoUser.name.split(' ')[0]}, ¿podemos tener una breve llamada hoy a las 4pm para revisar los copys de la campaña?`}
-                        className="w-full text-xs p-2.5 rounded-xl border border-slate-300 bg-white focus:ring-1 focus:ring-cyan-500 leading-relaxed"
-                        required
-                      />
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-slate-400">
-                          Recibirás respuesta a tu correo o por WhatsApp.
-                        </span>
-                        <button
-                          type="submit"
-                          className="px-4 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                          <span>Enviar Mensaje</span>
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </form>
-              </div>
-            </div>
-
-            {/* Footer del Modal */}
-            <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex items-center justify-between">
-              <span className="text-[11px] text-slate-500 font-medium">
-                APC Digital Hub • Aprobación de contenidos digitales
-              </span>
-              <button
-                onClick={() => setIsContactModalOpen(false)}
-                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* MODAL CLIENTE: "VER POST" (Vista limpia, enriquecida, sin edición, con Aprobar o Solicitar Cambios) */}
       {viewingPost && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
@@ -1836,26 +1802,25 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                       updatePostChangeComment(viewingPost.id, e.target.value);
                     }}
                     placeholder="Describe aquí los ajustes que necesitas en el copy in, caption, tono o llamada a la acción..."
-                    className="w-full text-xs p-2.5 rounded-xl border border-amber-300 bg-white text-slate-800 focus:ring-1 focus:ring-amber-500"
+                    className="w-full text-xs p-2.5 rounded-xl border border-amber-300 bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 placeholder:text-slate-400 focus:outline-hidden"
                     autoFocus
                   />
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
                     <span className="text-[11px] text-amber-800">
-                      Esta observación se incluirá al enviar tu dictamen al ejecutivo.
+                      Se enviará el ajuste al Community Manager y pasarás al siguiente post.
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (viewingPostIndex < odtPosts.length - 1) {
-                          handleNextPost();
-                        } else {
-                          setViewingPost(null);
-                        }
-                      }}
-                      className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs cursor-pointer"
-                    >
-                      Guardar y Continuar
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleModalSubmitChangeAndNext(viewingPost)}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>
+                          {viewingPostIndex < odtPosts.length - 1 ? 'Enviar cambio y pasar al siguiente →' : 'Enviar cambio y finalizar'}
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -1864,7 +1829,7 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                   <div className="text-xs text-slate-500">
                     {explicitlyApproved[viewingPost.id] ? (
                       <span className="text-emerald-700 font-bold flex items-center gap-1">
-                        <Check className="w-4 h-4" /> Marcado como listo para aprobar
+                        <Check className="w-4 h-4" /> Listo para aprobar
                       </span>
                     ) : (
                       <span>¿El copy de esta publicación cumple con lo solicitado?</span>
@@ -1883,16 +1848,13 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        handleMarkApproved(viewingPost.id);
-                        if (viewingPostIndex < odtPosts.length - 1) {
-                          handleNextPost();
-                        }
-                      }}
+                      onClick={() => handleModalApproveAndNext(viewingPost)}
                       className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
                     >
                       <Check className="w-4 h-4" />
-                      <span>Aprobar este Post</span>
+                      <span>
+                        {viewingPostIndex < odtPosts.length - 1 ? 'Aprobar este Post y Siguiente →' : 'Aprobar este Post'}
+                      </span>
                     </button>
                   </div>
                 </div>
