@@ -1275,20 +1275,25 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       )}
                     </div>
 
-                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white">
-                      <span className="text-[11px] font-bold uppercase text-slate-400 block mb-1">
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-1.5">
+                      <span className="text-[11px] font-bold uppercase text-slate-400 block">
                         Enlace del Material Final
                       </span>
                       {post.enlaceMaterialFinal ? (
-                        <a
-                          href={post.enlaceMaterialFinal}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-bold text-emerald-600 hover:text-emerald-800 inline-flex items-center gap-1 truncate max-w-full"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">Abrir en OneDrive / Drive</span>
-                        </a>
+                        <div className="space-y-1">
+                          <a
+                            href={post.enlaceMaterialFinal}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-bold text-emerald-600 hover:text-emerald-800 inline-flex items-center gap-1 truncate max-w-full"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">Abrir en OneDrive / Drive</span>
+                          </a>
+                          <span className="text-[11px] font-mono text-slate-600 truncate block select-all">
+                            {post.enlaceMaterialFinal}
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-xs text-slate-400 italic">Pendiente de entrega de producción</span>
                       )}

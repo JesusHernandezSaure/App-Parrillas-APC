@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Post, ODT, User } from '../types';
 import { 
-  CheckCircle2, AlertTriangle, ExternalLink, X, MessageSquare, ShieldCheck, ArrowRight
+  CheckCircle2, AlertTriangle, ExternalLink, X, MessageSquare, ShieldCheck, ArrowRight, Copy, Check
 } from 'lucide-react';
 import { RichTextDisplay } from './RichTextDisplay';
 
@@ -28,6 +28,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
   const [requiereRevisionMedica, setRequiereRevisionMedica] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const getTitle = () => {
     switch (type) {
@@ -162,7 +163,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
           </div>
 
           {/* Enlaces de Referencia / Material Final */}
-          <div className="flex flex-wrap gap-3">
+          <div className="space-y-3">
             {post.enlaceReferencia && (
               <a
                 href={post.enlaceReferencia}
@@ -176,15 +177,56 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
             )}
 
             {post.enlaceMaterialFinal && (
-              <a
-                href={post.enlaceMaterialFinal}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Abrir Material Producido (OneDrive / Drive)
-              </a>
+              <div className="p-3 bg-indigo-50/80 rounded-xl border border-indigo-200 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-indigo-950">
+                      Material Producido (OneDrive / Google Drive)
+                    </span>
+                    {post.historial.some(h => h.action.includes('Re-entrega') || h.action.includes('Ajustado')) && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                        🔄 Versión Actualizada tras Ajustes
+                      </span>
+                    )}
+                  </div>
+                  <a
+                    href={post.enlaceMaterialFinal}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Abrir en OneDrive / Drive
+                  </a>
+                </div>
+                
+                <div className="flex items-center justify-between gap-2 p-2 bg-white rounded-lg border border-indigo-100 font-mono text-[11px] text-slate-700">
+                  <span className="truncate max-w-md select-all" title={post.enlaceMaterialFinal}>
+                    {post.enlaceMaterialFinal}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(post.enlaceMaterialFinal);
+                      setCopiedLink(true);
+                      setTimeout(() => setCopiedLink(false), 2000);
+                    }}
+                    className="text-xs text-indigo-700 hover:text-indigo-900 font-bold shrink-0 flex items-center gap-1 px-2 py-0.5 rounded hover:bg-indigo-50 transition-colors cursor-pointer"
+                  >
+                    {copiedLink ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>¡Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar Enlace</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 

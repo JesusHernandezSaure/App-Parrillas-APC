@@ -69,6 +69,11 @@ export const App: React.FC = () => {
           if (loadedPosts.length > 0 && isSubscribed) {
             setPosts(loadedPosts);
             saveStoredPosts(loadedPosts);
+            // Sincronizar activeModalPost para evitar referencias obsoletas
+            setActiveModalPost(current => {
+              if (!current) return null;
+              return loadedPosts.find(p => p.id === current.id) || current;
+            });
           }
         });
       } catch (error) {
@@ -985,10 +990,16 @@ export const App: React.FC = () => {
   // 6. Entrega de Material Final por Diseñador o Video
   const handleSubmitMaterial = (post: Post, odt: ODT, materialUrl: string) => {
     const nextStatus: PostStatus = 'Corrección Material';
+    const isAdjustment = Boolean(post.solicitadoPorRole === 'Corrector' || post.aprobacionCorreccionMaterial);
+    const actionName = isAdjustment ? 'Re-entrega de Material Ajustado' : 'Entrega de Material Producido';
+    const reasonText = isAdjustment 
+      ? `Material ajustado según correcciones y alojado en: ${materialUrl}. Reenviado a control de calidad.`
+      : `Material final exportado y alojado en: ${materialUrl}. Enviado a control de calidad.`;
+
     const intervention = createIntervention(
       currentUser,
-      'Entrega de Material Producido',
-      'Material final exportado y alojado en OneDrive/Drive. Enviado a control de calidad.',
+      actionName,
+      reasonText,
       post.estado,
       nextStatus
     );
@@ -1002,6 +1013,11 @@ export const App: React.FC = () => {
         areaResponsable: 'Corrección',
         responsableActualName: odt.correctorName,
         responsableActualId: odt.correctorId,
+        solicitadoPorRole: undefined,
+        solicitadoPorName: undefined,
+        solicitadoPorUserId: undefined,
+        // Limpiamos el dictamen anterior de corrección para que Corrección lo reciba como nueva versión fresca
+        aprobacionCorreccionMaterial: undefined,
         historial: [intervention, ...p.historial],
         updatedAt: getNowTimestamp()
       };
@@ -2004,48 +2020,54 @@ export const App: React.FC = () => {
       {/* MODALES GLOBALES */}
 
       {/* 1. Modal Detalle y Auditoría del Post */}
-      {isDetailOpen && activeModalPost && (
-        <PostDetailModal
-          post={activeModalPost}
-          odt={odts.find(o => o.id === activeModalPost.odtId)}
-          currentUser={currentUser}
-          posts={posts}
-          initialEditMode={detailInitialEditMode}
-          onClose={() => {
-            setIsDetailOpen(false);
-            setActiveModalPost(null);
-            setDetailInitialEditMode(false);
-          }}
-          onAddComment={handleAddComment}
-          onUpdatePost={handleUpdatePostContent}
-          onDeletePost={handleDeletePost}
-          onSendToReview={handleSendToReview}
-          onDuplicatePost={handleDuplicatePost}
-          onRecyclePost={handleRecyclePost}
-          onOpenPublishModal={(p) => {
-            setIsDetailOpen(false);
-            setActiveModalPost(p);
-            setIsPublishOpen(true);
-          }}
-          onOpenIntervention={() => {
-            setIsDetailOpen(false);
-            setIsInterventionOpen(true);
-          }}
-        />
-      )}
+      {isDetailOpen && activeModalPost && (() => {
+        const freshPost = posts.find(p => p.id === activeModalPost.id) || activeModalPost;
+        return (
+          <PostDetailModal
+            post={freshPost}
+            odt={odts.find(o => o.id === freshPost.odtId)}
+            currentUser={currentUser}
+            posts={posts}
+            initialEditMode={detailInitialEditMode}
+            onClose={() => {
+              setIsDetailOpen(false);
+              setActiveModalPost(null);
+              setDetailInitialEditMode(false);
+            }}
+            onAddComment={handleAddComment}
+            onUpdatePost={handleUpdatePostContent}
+            onDeletePost={handleDeletePost}
+            onSendToReview={handleSendToReview}
+            onDuplicatePost={handleDuplicatePost}
+            onRecyclePost={handleRecyclePost}
+            onOpenPublishModal={(p) => {
+              setIsDetailOpen(false);
+              setActiveModalPost(p);
+              setIsPublishOpen(true);
+            }}
+            onOpenIntervention={() => {
+              setIsDetailOpen(false);
+              setIsInterventionOpen(true);
+            }}
+          />
+        );
+      })()}
 
       {/* 2. Modal Compuerta de Aprobación */}
-      {isApprovalOpen && activeModalPost && (
-        <ApprovalModal
-          post={activeModalPost}
-          odt={odts.find(o => o.id === activeModalPost.odtId)}
-          currentUser={currentUser}
-          type={approvalType}
-          onClose={() => setIsApprovalOpen(false)}
-          onApprove={(comment, extraOptions) => handleApprovalDecision(activeModalPost, approvalType, true, comment, extraOptions)}
-          onRequestChanges={(comment) => handleApprovalDecision(activeModalPost, approvalType, false, comment)}
-        />
-      )}
+      {isApprovalOpen && activeModalPost && (() => {
+        const freshPost = posts.find(p => p.id === activeModalPost.id) || activeModalPost;
+        return (
+          <ApprovalModal
+            post={freshPost}
+            odt={odts.find(o => o.id === freshPost.odtId)}
+            currentUser={currentUser}
+            type={approvalType}
+            onClose={() => setIsApprovalOpen(false)}
+            onApprove={(comment, extraOptions) => handleApprovalDecision(freshPost, approvalType, true, comment, extraOptions)}
+            onRequestChanges={(comment) => handleApprovalDecision(freshPost, approvalType, false, comment)}
+          />
+        );
+      })()}
 
       {/* 3. Modal Registrar Publicación / Programación */}
       {isPublishOpen && activeModalPost && (

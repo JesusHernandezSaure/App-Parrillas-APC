@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Post, ODT, Client, User } from '../types';
 import { 
   Palette, Video, ExternalLink, Send, CheckCircle2, Clock, 
-  Cloud, Info, AlertCircle, Link as LinkIcon, Sparkles, ArrowRight, Layers,
+  Cloud, Info, AlertCircle, AlertTriangle, Link as LinkIcon, Sparkles, ArrowRight, Layers,
   Filter, UserCheck, Eye 
 } from 'lucide-react';
 import { RichTextDisplay } from './RichTextDisplay';
@@ -176,11 +176,23 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
   };
 
   const handleSubmit = (post: Post, odt: ODT) => {
-    const url = urlsMap[post.id]?.trim() || post.enlaceMaterialFinal?.trim();
+    const rawVal = urlsMap[post.id] !== undefined ? urlsMap[post.id] : post.enlaceMaterialFinal;
+    const url = rawVal?.trim();
     if (!url) {
       setErrorsMap(prev => ({ ...prev, [post.id]: 'Debes ingresar el enlace de OneDrive o Google Drive del material producido.' }));
       return;
     }
+    // Limpiar estado temporal de este post para que no quede anclado a valores anteriores
+    setUrlsMap(prev => {
+      const copy = { ...prev };
+      delete copy[post.id];
+      return copy;
+    });
+    setErrorsMap(prev => {
+      const copy = { ...prev };
+      delete copy[post.id];
+      return copy;
+    });
     onSubmitMaterial(post, odt, url);
   };
 
@@ -425,11 +437,31 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
 
             {/* Formulario de entrega contextual: Arte vs Audio/Video */}
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-                {isVideoDiscipline 
-                  ? 'Enlace del Video Final Producido (OneDrive / Google Drive URL) *' 
-                  : 'Enlace del Arte Final Producido (OneDrive / Google Drive URL) *'}
-              </label>
+              {/* Notificación si Corrección solicitó ajustes */}
+              {(post.solicitadoPorRole === 'Corrector' || post.aprobacionCorreccionMaterial?.status === 'Cambios Solicitados') && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Ajustes solicitados por Corrección:</span>
+                  </div>
+                  <p className="text-amber-800 italic pl-5">
+                    "{post.aprobacionCorreccionMaterial?.comment || post.historial.find(h => h.action.includes('correccion_material'))?.motivo || 'Revisar detalles técnicos del material'}"
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                  {isVideoDiscipline 
+                    ? 'Enlace del Video Final Producido (OneDrive / Google Drive URL) *' 
+                    : 'Enlace del Arte Final Producido (OneDrive / Google Drive URL) *'}
+                </label>
+                {post.enlaceMaterialFinal && (
+                  <span className="text-[11px] text-slate-500">
+                    Enlace previo: <a href={post.enlaceMaterialFinal} target="_blank" rel="noopener noreferrer" className="text-indigo-600 font-semibold hover:underline">Ver actual</a>
+                  </span>
+                )}
+              </div>
               
               <div className="flex flex-col sm:flex-row items-center gap-2">
                 <div className="relative flex-1 w-full">

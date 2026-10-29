@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Post, ODT, Client, User } from '../types';
-import { CheckSquare, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Clock, Layers, Sparkles, Filter, UserCheck, Eye, Edit3 } from 'lucide-react';
+import { CheckSquare, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Clock, Layers, Sparkles, Filter, UserCheck, Eye, Edit3, Copy, Check } from 'lucide-react';
 import { RichTextDisplay } from './RichTextDisplay';
 
 interface CorrectorViewProps {
@@ -22,6 +22,7 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
 }) => {
   const [subQueue, setSubQueue] = useState<'copy' | 'material' | 'history'>('copy');
   const [selectedOdtFilter, setSelectedOdtFilter] = useState<string>('all');
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
   
   // Soporte para supervisores/administradores (permitir alternar entre asignadas y todas)
   const isSupervisorOrAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'Admin' || Boolean(currentUser.permissions?.canSuperviseAll);
@@ -379,21 +380,72 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Acceso al material */}
+                  {/* Acceso al material con URL explícita y auditoría */}
                   {post.enlaceMaterialFinal ? (
-                    <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between">
-                      <span className="text-xs font-bold text-emerald-900">
-                        Material alojado externamente (OneDrive / Drive)
-                      </span>
-                      <a
-                        href={post.enlaceMaterialFinal}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 transition-colors"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        Abrir y Validar Material
-                      </a>
+                    <div className="p-3.5 bg-emerald-50/80 rounded-xl border border-emerald-200/90 space-y-2.5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="text-xs font-bold text-emerald-950">
+                            Material Final Producido (OneDrive / Google Drive)
+                          </span>
+                          {post.historial.some(h => h.action.includes('Re-entrega') || h.action.includes('Ajustado')) && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                              🔄 Versión Actualizada tras Ajustes
+                            </span>
+                          )}
+                        </div>
+
+                        <a
+                          href={post.enlaceMaterialFinal}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 transition-colors shadow-2xs"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Abrir y Validar Material
+                        </a>
+                      </div>
+
+                      {/* URL Visible y Botón Copiar */}
+                      <div className="flex items-center justify-between gap-2 p-2 bg-white rounded-lg border border-emerald-200/70 font-mono text-[11px] text-slate-700">
+                        <span className="truncate max-w-md select-all" title={post.enlaceMaterialFinal}>
+                          {post.enlaceMaterialFinal}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(post.enlaceMaterialFinal);
+                            setCopiedPostId(post.id);
+                            setTimeout(() => setCopiedPostId(null), 2000);
+                          }}
+                          className="text-xs text-emerald-700 hover:text-emerald-900 font-bold shrink-0 flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 transition-colors cursor-pointer"
+                        >
+                          {copiedPostId === post.id ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>¡Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copiar Enlace</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Auditoría de última entrega */}
+                      {(() => {
+                        const lastDelivery = post.historial.find(h => h.action.includes('Material'));
+                        if (!lastDelivery) return null;
+                        return (
+                          <div className="text-[11px] text-emerald-800 flex items-center justify-between pt-1 border-t border-emerald-200/50">
+                            <span>Entregado: <strong>{lastDelivery.date}</strong> por <strong>{lastDelivery.userName}</strong></span>
+                            <span className="italic truncate max-w-xs">{lastDelivery.action}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ) : (
                     <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 font-semibold">
