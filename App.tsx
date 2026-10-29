@@ -1325,16 +1325,32 @@ export const App: React.FC = () => {
     updateOdtsState(updatedOdts);
 
     // Actualizar publicaciones: reasignar a Community para "Ajustes de Copy"
-    const isAllAffected = affectedPosts.length === 0 && Boolean(generalComment.trim());
+    const hasGeneral = Boolean(generalComment && generalComment.trim());
+    const isAllAffected = affectedPosts.length === 0 && hasGeneral;
 
     const updatedPosts = posts.map(p => {
       if (p.odtId !== odtId) return p;
 
       const hasSpecificChange = changeMap.has(p.id);
+      
       if (hasSpecificChange || isAllAffected) {
-        const postCommentText = hasSpecificChange
-          ? (changeMap.get(p.id) || 'Ajuste solicitado por el cliente.')
-          : (generalComment || 'Ajuste solicitado por el cliente en la parrilla.');
+        // Preservar cualquier comentario específico previo del cliente si existe
+        const existingClientComment = p.aprobacionClienteCopy?.comment || '';
+        const specificComment = changeMap.get(p.id);
+        
+        let postCommentText = '';
+        if (specificComment) {
+          postCommentText = hasGeneral
+            ? `[Post #${p.numeroInterno}]: ${specificComment}\n[Observación General de Parrilla]: ${generalComment.trim()}`
+            : specificComment;
+        } else if (existingClientComment) {
+          // Ya tenía un comentario específico previo del post; conservarlo y agregar la nota general
+          postCommentText = hasGeneral
+            ? `${existingClientComment}\n\n[Nota General de Parrilla]: ${generalComment.trim()}`
+            : existingClientComment;
+        } else {
+          postCommentText = hasGeneral ? generalComment.trim() : 'Ajuste solicitado por el cliente en la publicación.';
+        }
 
         const nextStatus: PostStatus = 'Cambios solicitados por Cliente';
         const nextArea = tipo === 'COPY' 
@@ -1386,8 +1402,67 @@ export const App: React.FC = () => {
         };
       }
 
-      // Si no tiene observaciones, y está en estado de revisión por cliente, se considera aprobado y avanza!
+      // Si el post NO tiene observaciones en este lote, pero ya estaba en "Cambios solicitados por Cliente",
+      // conservar intactos sus comentarios previos y su estado
+      if (p.estado === 'Cambios solicitados por Cliente') {
+        if (hasGeneral) {
+          const generalPostComment: PostComment = {
+            id: 'c-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+            userId: currentUser.id,
+            userName: currentUser.name,
+            userRole: currentUser.role,
+            text: `[Nota General de Parrilla]: ${generalComment.trim()}`,
+            createdAt: getNowTimestamp(),
+            isClientVisible: true
+          };
+          return {
+            ...p,
+            comentarios: [generalPostComment, ...p.comentarios],
+            updatedAt: getNowTimestamp()
+          };
+        }
+        return p;
+      }
+
+      // Si no tiene observaciones y está en estado de revisión por cliente:
       if (tipo === 'COPY' && p.estado === 'Aprobación Copy Cliente') {
+        // Si hay una nota general de parrilla, no lo marcamos aprobado automáticamente; pasa a ajustes con la nota
+        if (hasGeneral) {
+          const postCommentText = `[Nota General de Parrilla]: ${generalComment.trim()}`;
+          const nextStatus: PostStatus = 'Cambios solicitados por Cliente';
+          const clientComment: PostComment = {
+            id: 'c-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+            userId: currentUser.id,
+            userName: currentUser.name,
+            userRole: currentUser.role,
+            text: `[Revisión COPY del Cliente]: ${postCommentText}`,
+            createdAt: getNowTimestamp(),
+            isClientVisible: true
+          };
+          const intervention = createIntervention(
+            currentUser,
+            'Cliente solicitó cambios en Copy (Parrilla General)',
+            postCommentText,
+            p.estado,
+            nextStatus
+          );
+          const disapprovalRecord = createApproval(currentUser, 'Cambios Solicitados', postCommentText);
+          return {
+            ...p,
+            estado: nextStatus,
+            areaResponsable: 'Community',
+            responsableActualName: targetOdt.communityName || 'Community Manager',
+            responsableActualId: targetOdt.communityId || '',
+            solicitadoPorRole: 'Cliente',
+            solicitadoPorName: currentUser.name,
+            solicitadoPorUserId: currentUser.id,
+            aprobacionClienteCopy: disapprovalRecord,
+            comentarios: [clientComment, ...p.comentarios],
+            historial: [intervention, ...p.historial],
+            updatedAt: getNowTimestamp()
+          };
+        }
+
         const approvalRecord = createApproval(currentUser, 'Aprobado', 'Aprobado automáticamente en la ronda de revisión.');
         let nextStatus: PostStatus = 'Producción Arte';
         let nextArea = 'Arte';

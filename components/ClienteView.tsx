@@ -418,14 +418,31 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
     }
   };
 
-  // Limpiar todas las observaciones y marcar todo listo
+  // Limpiar borradores locales de observaciones no enviadas
   const handleClearAllChanges = () => {
     setPostChanges({});
     setShowGeneralChangePrompt(false);
-    setGeneralComment('');
   };
 
-  // Enviar solicitud de cambios (desde el módulo al pie)
+  // Guardar / Enviar únicamente el comentario general de la parrilla (100% independiente de los posts)
+  const handleSaveGeneralCommentOnly = () => {
+    if (!activeOdt) return;
+    const cleanComment = generalComment.trim();
+    if (!cleanComment) {
+      alert('Por favor escribe una indicación o comentario general para toda la parrilla antes de enviar.');
+      return;
+    }
+    // Registra el comentario general de la parrilla sin alterar las notas individuales de los posts
+    onBatchRequestChanges(activeOdt.id, 'COPY', cleanComment, []);
+    setSuccessNotif({
+      postId: 'general',
+      message: '¡Comentario general de la parrilla registrado y enviado al equipo de cuenta!',
+      type: 'change'
+    });
+    setTimeout(() => setSuccessNotif(null), 4000);
+  };
+
+  // Enviar solicitud de cambios (observaciones individuales de posts + comentario general si existe)
   const handleSubmitChanges = () => {
     if (!activeOdt) return;
     const changeIds = Object.keys(postChanges);
@@ -439,10 +456,15 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
       comment: postChanges[id]?.trim() || 'Ajuste solicitado por el cliente en esta publicación.'
     }));
 
-    onBatchRequestChanges(activeOdt.id, 'COPY', generalComment, affected);
+    onBatchRequestChanges(activeOdt.id, 'COPY', generalComment.trim(), affected);
     setPostChanges({});
-    setGeneralComment('');
     setShowGeneralChangePrompt(false);
+    setSuccessNotif({
+      postId: 'batch',
+      message: `¡Observaciones enviadas al equipo de cuenta! (${affected.length} post(s)${generalComment.trim() ? ' + Comentario general' : ''})`,
+      type: 'change'
+    });
+    setTimeout(() => setSuccessNotif(null), 4500);
   };
 
   // Manejador: Confirmar Aprobación de Toda la Parrilla
@@ -1086,10 +1108,15 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                       const isApproved = Boolean(explicitlyApproved[post.id]);
                       const isChangeRequested = post.estado === 'Cambios solicitados por Cliente';
 
+                      // Buscar observación previa enviada por el cliente para no perderla jamás de vista
+                      const clientSentComment = post.aprobacionClienteCopy?.comment || 
+                        post.comentarios?.find(c => c.isClientVisible && (c.userRole === 'Cliente' || c.text.includes('[Revisión') || c.text.includes('Cliente')) && !c.text.startsWith('[Nota General de Parrilla]:'))?.text || 
+                        null;
+
                       return (
                         <React.Fragment key={post.id}>
                           <tr className={`hover:bg-slate-50/80 transition-colors ${
-                            hasChange ? 'bg-amber-50/60' : isApproved ? 'bg-emerald-50/30' : isPendingClient ? 'bg-amber-50/20' : ''
+                            hasChange ? 'bg-amber-50/60' : isApproved ? 'bg-emerald-50/30' : isChangeRequested ? 'bg-amber-50/30' : isPendingClient ? 'bg-amber-50/20' : ''
                           }`}>
                             {/* Columna Vertical de Metadatos de la Publicación */}
                             <td className="p-3 align-top">
@@ -1114,9 +1141,31 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                                   <span>{post.fechaPrevista}</span>
                                 </div>
                                 {post.tipoMaterial && (
-                                  <span className="text-[10px] text-slate-400 font-medium truncate max-w-[130px]" title={post.tipoMaterial}>
+                                  <span className="text-[10px] text-slate-500 font-semibold truncate max-w-[140px]" title={post.tipoMaterial}>
                                     {post.tipoMaterial}
                                   </span>
+                                )}
+
+                                {/* Enlace de la Imagen / Material de Referencia */}
+                                {post.enlaceReferencia ? (
+                                  <div className="pt-1 mt-0.5 border-t border-slate-100">
+                                    <a
+                                      href={post.enlaceReferencia}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1.5 px-2 py-1 bg-cyan-50 hover:bg-cyan-100 text-cyan-900 border border-cyan-200 hover:border-cyan-300 rounded-lg text-[10px] font-bold transition-all shadow-2xs group max-w-[155px]"
+                                      title={`Abrir referencia: ${post.enlaceReferencia}`}
+                                    >
+                                      <ExternalLink className="w-3 h-3 text-cyan-600 shrink-0 group-hover:scale-110 transition-transform" />
+                                      <span className="truncate">Ref. Imagen</span>
+                                    </a>
+                                  </div>
+                                ) : (
+                                  <div className="pt-0.5">
+                                    <span className="text-[10px] text-slate-400 italic">
+                                      Sin ref.
+                                    </span>
+                                  </div>
                                 )}
                               </div>
                             </td>
@@ -1156,9 +1205,19 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                                     <span>Aprobado</span>
                                   </div>
                                 ) : isChangeRequested ? (
-                                  <div className="w-full py-1.5 px-2 rounded-lg bg-amber-100 text-amber-900 font-bold text-xs flex items-center justify-center gap-1 border border-amber-300">
-                                    <Clock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                                    <span>En Ajustes</span>
+                                  <div className="flex flex-col gap-1 w-full">
+                                    <div className="w-full py-1 px-1.5 rounded-lg bg-amber-100 text-amber-900 font-bold text-[11px] flex items-center justify-center gap-1 border border-amber-300">
+                                      <Clock className="w-3 h-3 text-amber-700 shrink-0" />
+                                      <span>En Ajustes</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRequestChange(post.id)}
+                                      className="text-[10px] text-center text-slate-600 hover:text-amber-800 font-semibold underline transition-colors cursor-pointer"
+                                      title="Editar o agregar notas adicionales a este post"
+                                    >
+                                      Editar nota
+                                    </button>
                                   </div>
                                 ) : hasChange ? (
                                   <div className="flex flex-col gap-1 w-full">
@@ -1214,15 +1273,50 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                             </td>
                           </tr>
 
+                          {/* Fila con la Observación Ya Enviada al Community (Siempre Visible para el Cliente) */}
+                          {(clientSentComment || isChangeRequested) && !hasChange && (
+                            <tr className="bg-amber-50/40 border-b border-amber-200/80">
+                              <td colSpan={4} className="p-2.5 pl-6 sm:pl-8">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-amber-50/90 p-2.5 rounded-xl border border-amber-200 text-xs">
+                                  <div className="space-y-0.5 min-w-0">
+                                    <div className="flex items-center gap-1.5 font-bold text-amber-900 text-[11px]">
+                                      <MessageSquare className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                      <span>Observación registrada para este post (enviada al Community Manager):</span>
+                                      <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-950 font-black">
+                                        En Ajustes
+                                      </span>
+                                    </div>
+                                    <p className="text-slate-800 italic font-medium pl-5 whitespace-pre-wrap">
+                                      "{clientSentComment || 'Ajustes solicitados en esta publicación.'}"
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setPostChanges(prev => ({
+                                        ...prev,
+                                        [post.id]: prev[post.id] || clientSentComment || ''
+                                      }));
+                                    }}
+                                    className="shrink-0 text-[11px] px-3 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-bold transition-colors cursor-pointer shadow-2xs self-start sm:self-auto"
+                                    title="Modificar o ampliar la observación para este post"
+                                  >
+                                    Editar observación
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+
                           {/* Observación contextual para este post si se seleccionó para cambio */}
                           {!isPostApproved && hasChange && (
                             <tr className="bg-amber-50/80 border-b border-amber-200">
                               <td colSpan={4} className="p-3.5 pl-6 sm:pl-8">
-                                <div className="space-y-2 max-w-2xl">
+                                <div className="space-y-2 max-w-3xl">
                                   <div className="flex items-center justify-between">
                                     <span className="text-[11px] font-bold text-amber-950 flex items-center gap-1.5">
                                       <MessageSquare className="w-3.5 h-3.5 text-amber-700" />
-                                      Observación para el Post {post.numeroInterno} ({post.redSocial}):
+                                      Observación específica para el Post {post.numeroInterno} ({post.redSocial}):
                                     </span>
                                     <button
                                       onClick={() => {
@@ -1241,13 +1335,13 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                                     rows={2}
                                     value={postChanges[post.id] || ''}
                                     onChange={(e) => updatePostChangeComment(post.id, e.target.value)}
-                                    placeholder="Escribe aquí los ajustes que necesitas en el copy in, copy out o llamada a la acción..."
+                                    placeholder="Escribe aquí los ajustes que necesitas en el copy in, copy out o llamada a la acción de este post..."
                                     className="w-full text-xs p-2.5 rounded-xl border border-amber-300 bg-white text-slate-800 focus:ring-2 focus:ring-amber-500 placeholder:text-slate-400 focus:outline-hidden"
                                     autoFocus
                                   />
                                   <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
                                     <span className="text-[11px] text-amber-800">
-                                      Al enviar, el post pasará directamente al Community Manager para su ajuste.
+                                      Puedes enviar esta observación ahora o dejarla lista para enviar junto al comentario general.
                                     </span>
                                     <button
                                       type="button"
@@ -1255,7 +1349,7 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                                       className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
                                     >
                                       <Send className="w-3.5 h-3.5" />
-                                      <span>Enviar cambio a Community</span>
+                                      <span>Enviar cambio de este post a Community</span>
                                     </button>
                                   </div>
                                 </div>
@@ -1344,87 +1438,101 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                       <Phone className="w-3.5 h-3.5 text-emerald-600" /> {ejecutivoUser.phone}
                     </a>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setIsContactModalOpen(true)}
-                    className="text-cyan-700 hover:text-cyan-800 underline font-bold cursor-pointer"
-                  >
-                    Ver Ficha de Contacto
-                  </button>
+                  {ejecutivoUser.email && (
+                    <a 
+                      href={`mailto:${ejecutivoUser.email}?subject=${encodeURIComponent(`Consulta Parrilla: ${activeOdt.nombreParrilla} (${client.name})`)}`}
+                      className="text-cyan-700 hover:text-cyan-800 underline font-bold cursor-pointer flex items-center gap-1"
+                      title="Escribir por correo electrónico"
+                    >
+                      <Mail className="w-3.5 h-3.5" /> Correo
+                    </a>
+                  )}
                 </div>
               </div>
 
-              {/* Si hay cambios o se desplegó la solicitud general */}
-              {(changedCount > 0 || showGeneralChangePrompt) ? (
-                <div className="space-y-3 bg-amber-50/50 p-4 rounded-xl border border-amber-200">
+              {/* Sección de Comentario General para toda la Parrilla (Completamente Independiente) */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/90 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <label className="text-xs font-bold text-amber-950 block mb-1">
-                      Comentario General para el Equipo de Contenidos (Opcional):
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <MessageSquare className="w-4 h-4 text-cyan-700" />
+                      <span>Comentario General para toda la Parrilla (Opcional):</span>
                     </label>
-                    <textarea
-                      rows={2}
-                      value={generalComment}
-                      onChange={(e) => setGeneralComment(e.target.value)}
-                      placeholder="Indicaciones generales para la ronda de ajustes (ej. tono, llamada a la acción general)..."
-                      className="w-full text-xs p-2.5 rounded-xl border border-amber-300 bg-white focus:ring-1 focus:ring-amber-500"
-                    />
+                    <p className="text-[11px] text-slate-500">
+                      Indicaciones de alcance global para la entrega (ej. tono, directrices de marca o felicitaciones). <strong>Es independiente de las observaciones que dejes en cada post.</strong>
+                    </p>
                   </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                  {generalComment.trim() && (
                     <button
-                      onClick={handleClearAllChanges}
-                      className="text-xs text-slate-500 hover:text-slate-800 font-semibold underline text-left"
+                      type="button"
+                      onClick={handleSaveGeneralCommentOnly}
+                      className="self-start sm:self-auto px-3.5 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer shrink-0"
+                      title="Enviar únicamente este comentario general al equipo sin alterar las observaciones de los posts"
                     >
-                      Descartar observaciones y marcar todo aprobado
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Enviar Nota General</span>
                     </button>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setShowApprovalModal(true)}
-                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                      >
-                        {hasPendingAdditionalPosts && approvedPostsCount > 0
-                          ? `Aprobar Posts Nuevos (${pendingClientPosts.length})`
-                          : 'Aprobar Toda la Parrilla'}
-                      </button>
-                      <button
-                        onClick={handleSubmitChanges}
-                        className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        Enviar Solicitud de Ajustes ({changedCount > 0 ? `${changedCount} posts` : 'Parrilla general'})
-                      </button>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              ) : (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-                  <div className="text-xs text-slate-500">
-                    {hasPendingAdditionalPosts && approvedPostsCount > 0
-                      ? 'Al presionar "Aprobar Posts Nuevos", se autorizan los copys adicionales y se envían directamente a producción técnica.'
-                      : 'Al presionar "Aprobar Toda la Parrilla", se autorizan los copys y pasan a las áreas técnicas de diseño y video.'}
-                  </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                <textarea
+                  rows={2}
+                  value={generalComment}
+                  onChange={(e) => setGeneralComment(e.target.value)}
+                  placeholder="Escribe aquí cualquier indicación general para el equipo de contenidos y tu ejecutiva..."
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 focus:ring-2 focus:ring-cyan-600 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Botonera de Envío y Dictamen */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                <div className="text-xs text-slate-500">
+                  {changedCount > 0 ? (
+                    <span className="text-amber-900 font-bold flex items-center gap-1.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Tienes {changedCount} post(s) con notas pendientes de enviar en bloque{generalComment.trim() ? ' y 1 nota general' : ''}.</span>
+                    </span>
+                  ) : (
+                    <span>Puedes enviar observaciones en cada post individualmente o autorizar la parrilla cuando todo esté conforme.</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  {changedCount > 0 && (
                     <button
-                      onClick={() => setShowGeneralChangePrompt(true)}
-                      className="px-4 py-2.5 bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-900 border border-slate-200 hover:border-amber-300 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                      type="button"
+                      onClick={handleClearAllChanges}
+                      className="text-xs text-slate-500 hover:text-slate-800 font-semibold underline px-2 cursor-pointer"
                     >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      Solicitar Ajustes
+                      Descartar borradores ({changedCount})
                     </button>
+                  )}
+
+                  {changedCount > 0 && (
                     <button
-                      onClick={() => setShowApprovalModal(true)}
-                      className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                      type="button"
+                      onClick={handleSubmitChanges}
+                      className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
-                      <CheckCircle2 className="w-4 h-4" />
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Enviar Observaciones ({changedCount} posts{generalComment.trim() ? ' + General' : ''})</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowApprovalModal(true)}
+                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
                       {hasPendingAdditionalPosts && approvedPostsCount > 0
                         ? `Aprobar Posts Nuevos (${pendingClientPosts.length})`
                         : 'Aprobar Toda la Parrilla'}
-                    </button>
-                  </div>
+                    </span>
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
