@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Client, ODT, Post, User, PostStatus } from '../types';
 import { 
-  Building2, Layers, Folder, FolderOpen, Plus, ChevronRight, CheckCircle2, 
+  Building2, Layers, Folder, FolderOpen, Plus, ChevronRight, CheckCircle2, Check,
   Clock, AlertTriangle, ShieldCheck, ExternalLink, ShieldAlert, Send, 
   Search, Filter, Sparkles, UserCheck, Calendar, ArrowRight, TrendingUp, AlertCircle,
   Copy, RefreshCw, X, Share2, Globe, Edit3, CheckSquare, Palette, Video, FileText, Trash2
