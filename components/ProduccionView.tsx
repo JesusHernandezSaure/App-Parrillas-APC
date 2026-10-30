@@ -52,10 +52,12 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
   const assignedOdts = useMemo(() => {
     return odts.filter(o => {
       const isAssignedArte = (
+        !o.disenadorId || o.disenadorId === '' || o.disenadorId === 'u-dis' ||
         o.disenadorId === currentUser.id ||
         (o.disenadorName && o.disenadorName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
       );
       const isAssignedVideo = (
+        !o.editorAvId || o.editorAvId === '' || o.editorAvId === 'u-av' ||
         o.editorAvId === currentUser.id ||
         (o.editorAvName && o.editorAvName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
       );
@@ -83,6 +85,7 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
     );
 
     if (targetDiscipline === 'arte') {
+      if (!odt.disenadorId || odt.disenadorId === '' || odt.disenadorId === 'u-dis') return true;
       return (
         odt.disenadorId === currentUser.id ||
         (odt.disenadorName && odt.disenadorName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
@@ -90,6 +93,7 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
     }
 
     if (targetDiscipline === 'video') {
+      if (!odt.editorAvId || odt.editorAvId === '' || odt.editorAvId === 'u-av') return true;
       return (
         odt.editorAvId === currentUser.id ||
         (odt.editorAvName && odt.editorAvName.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
@@ -97,6 +101,7 @@ export const ProduccionView: React.FC<ProduccionViewProps> = ({
     }
 
     return (
+      !odt.disenadorId || !odt.editorAvId ||
       odt.disenadorId === currentUser.id ||
       odt.editorAvId === currentUser.id ||
       (odt.disenadorName && odt.disenadorName.trim().toLowerCase() === currentUser.name.trim().toLowerCase()) ||

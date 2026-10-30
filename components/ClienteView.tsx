@@ -1108,9 +1108,9 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                       const isApproved = Boolean(explicitlyApproved[post.id]);
                       const isChangeRequested = post.estado === 'Cambios solicitados por Cliente';
 
-                      // Buscar observación previa enviada por el cliente para no perderla jamás de vista
-                      const clientSentComment = post.aprobacionClienteCopy?.comment || 
-                        post.comentarios?.find(c => c.isClientVisible && (c.userRole === 'Cliente' || c.text.includes('[Revisión') || c.text.includes('Cliente')) && !c.text.startsWith('[Nota General de Parrilla]:'))?.text || 
+                      // Buscar observación previa de cambios enviada por el cliente para no perderla jamás de vista
+                      const clientSentComment = (post.aprobacionClienteCopy?.status === 'Cambios Solicitados' ? post.aprobacionClienteCopy.comment : null) || 
+                        post.comentarios?.find(c => c.isClientVisible && (c.userRole === 'Cliente' || c.text.includes('[Revisión') || c.text.includes('Cliente')) && !c.text.startsWith('[Nota General de Parrilla]:') && !c.text.toLowerCase().includes('aprobado'))?.text || 
                         null;
 
                       return (
@@ -1273,8 +1273,8 @@ export const ClienteView: React.FC<ClienteViewProps> = ({
                             </td>
                           </tr>
 
-                          {/* Fila con la Observación Ya Enviada al Community (Siempre Visible para el Cliente) */}
-                          {(clientSentComment || isChangeRequested) && !hasChange && (
+                          {/* Fila con la Observación Ya Enviada al Community (Solo visible si el post NO está aprobado y requiere ajustes) */}
+                          {!isPostApproved && (clientSentComment || isChangeRequested) && !hasChange && (
                             <tr className="bg-amber-50/40 border-b border-amber-200/80">
                               <td colSpan={4} className="p-2.5 pl-6 sm:pl-8">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-amber-50/90 p-2.5 rounded-xl border border-amber-200 text-xs">

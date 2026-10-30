@@ -58,21 +58,83 @@ export const App: React.FC = () => {
           }
         });
 
+        const sanitizeOdtsWithCompletedChanges = (rawOdts: ODT[], rawPosts: Post[]): ODT[] => {
+          return rawOdts.map(o => {
+            if (o.estadoAprobacionCopy === 'Cambios Solicitados') {
+              const postsForOdt = rawPosts.filter(p => p.odtId === o.id);
+              const pendingChanges = postsForOdt.filter(p => 
+                p.estado === 'Cambios solicitados por Cliente' || 
+                p.estado === 'Ajustes de Copy' ||
+                (p.aprobacionClienteCopy?.status === 'Cambios Solicitados' && !['Producción Arte', 'Producción Audio/Video', 'Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado))
+              );
+              if (postsForOdt.length > 0 && pendingChanges.length === 0) {
+                return {
+                  ...o,
+                  estadoAprobacionCopy: 'Aprobada' as const
+                };
+              }
+            }
+            return o;
+          });
+        };
+
         unsubOdts = dbListen('odts', (loadedOdts) => {
           if (loadedOdts.length > 0 && isSubscribed) {
-            setOdts(loadedOdts);
-            saveStoredOdts(loadedOdts);
+            const currentPosts = getStoredPosts();
+            const cleanedOdts = sanitizeOdtsWithCompletedChanges(loadedOdts, currentPosts);
+            setOdts(cleanedOdts);
+            saveStoredOdts(cleanedOdts);
           }
         });
 
         unsubPosts = dbListen('posts', (loadedPosts) => {
           if (loadedPosts.length > 0 && isSubscribed) {
-            setPosts(loadedPosts);
-            saveStoredPosts(loadedPosts);
+            const currentOdts = getStoredOdts();
+            const cleanedPosts = loadedPosts.map(p => {
+              if (
+                p.estado === 'Cambios solicitados por Cliente' && 
+                p.aprobacionClienteCopy?.status === 'Aprobado' &&
+                !p.aprobacionClienteCopy?.comment?.toLowerCase().includes('solicit')
+              ) {
+                const odt = currentOdts.find(o => o.id === p.odtId);
+                const isAV = isAudioVisual(p.tipoMaterial);
+                const nextStatus: PostStatus = (isAV && p.requiereArtePrevio)
+                  ? 'Diseño de Editables (Arte)'
+                  : isAV
+                  ? 'Producción Audio/Video'
+                  : 'Producción Arte';
+                const nextArea = isAV && !p.requiereArtePrevio ? 'Audio y Video' : 'Arte';
+                return {
+                  ...p,
+                  estado: nextStatus,
+                  areaResponsable: nextArea,
+                  responsableActualId: isAV ? odt?.editorAvId || '' : odt?.disenadorId || '',
+                  responsableActualName: isAV ? odt?.editorAvName || 'Editor AV' : odt?.disenadorName || 'Diseñador',
+                  solicitadoPorRole: undefined,
+                  solicitadoPorName: undefined,
+                  solicitadoPorUserId: undefined
+                };
+              }
+              return p;
+            });
+
+            setPosts(cleanedPosts);
+            saveStoredPosts(cleanedPosts);
             // Sincronizar activeModalPost para evitar referencias obsoletas
             setActiveModalPost(current => {
               if (!current) return null;
-              return loadedPosts.find(p => p.id === current.id) || current;
+              return cleanedPosts.find(p => p.id === current.id) || current;
+            });
+
+            // Verificar si la finalización de estos posts resuelve ODTs con alerta de cambios
+            setOdts(prevOdts => {
+              const healed = sanitizeOdtsWithCompletedChanges(prevOdts, cleanedPosts);
+              if (JSON.stringify(healed) !== JSON.stringify(prevOdts)) {
+                saveStoredOdts(healed);
+                healed.forEach(ho => dbSave('odts', ho.id, ho));
+                return healed;
+              }
+              return prevOdts;
             });
           }
         });
@@ -94,8 +156,58 @@ export const App: React.FC = () => {
 
   const [users, setUsers] = useState<User[]>(() => getStoredUsers());
   const [clients, setClients] = useState<Client[]>(() => getStoredClients());
-  const [odts, setOdts] = useState<ODT[]>(() => getStoredOdts());
-  const [posts, setPosts] = useState<Post[]>(() => getStoredPosts());
+  const [odts, setOdts] = useState<ODT[]>(() => {
+    const rawO = getStoredOdts();
+    const rawP = getStoredPosts();
+    return rawO.map(o => {
+      if (o.estadoAprobacionCopy === 'Cambios Solicitados') {
+        const postsForOdt = rawP.filter(p => p.odtId === o.id);
+        const pendingChanges = postsForOdt.filter(p => 
+          p.estado === 'Cambios solicitados por Cliente' || 
+          p.estado === 'Ajustes de Copy' ||
+          (p.aprobacionClienteCopy?.status === 'Cambios Solicitados' && !['Producción Arte', 'Producción Audio/Video', 'Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado))
+        );
+        if (postsForOdt.length > 0 && pendingChanges.length === 0) {
+          return {
+            ...o,
+            estadoAprobacionCopy: 'Aprobada' as const
+          };
+        }
+      }
+      return o;
+    });
+  });
+  const [posts, setPosts] = useState<Post[]>(() => {
+    const raw = getStoredPosts();
+    const storedOdts = getStoredOdts();
+    return raw.map(p => {
+      if (
+        p.estado === 'Cambios solicitados por Cliente' && 
+        p.aprobacionClienteCopy?.status === 'Aprobado' &&
+        !p.aprobacionClienteCopy?.comment?.toLowerCase().includes('solicit')
+      ) {
+        const odt = storedOdts.find(o => o.id === p.odtId);
+        const isAV = isAudioVisual(p.tipoMaterial);
+        const nextStatus: PostStatus = (isAV && p.requiereArtePrevio)
+          ? 'Diseño de Editables (Arte)'
+          : isAV
+          ? 'Producción Audio/Video'
+          : 'Producción Arte';
+        const nextArea = isAV && !p.requiereArtePrevio ? 'Audio y Video' : 'Arte';
+        return {
+          ...p,
+          estado: nextStatus,
+          areaResponsable: nextArea,
+          responsableActualId: isAV ? odt?.editorAvId || '' : odt?.disenadorId || '',
+          responsableActualName: isAV ? odt?.editorAvName || 'Editor AV' : odt?.disenadorName || 'Diseñador',
+          solicitadoPorRole: undefined,
+          solicitadoPorName: undefined,
+          solicitadoPorUserId: undefined
+        };
+      }
+      return p;
+    });
+  });
 
   // Real login and user credentials state
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
@@ -243,6 +355,11 @@ export const App: React.FC = () => {
 
     setOdts(newOdts);
     saveStoredOdts(newOdts);
+  };
+
+  const handleUpdateOdt = (odtId: string, patch: Partial<ODT>) => {
+    const updated = odts.map(o => o.id === odtId ? { ...o, ...patch } : o);
+    updateOdtsState(updated);
   };
 
   // SUPER ADMIN CRUD & GESTIÓN INTEGRAL
@@ -1340,18 +1457,17 @@ export const App: React.FC = () => {
     const updatedOdts = odts.map(o => o.id === odtId ? updatedOdt : o);
     updateOdtsState(updatedOdts);
 
-    // Actualizar publicaciones: reasignar a Community para "Ajustes de Copy"
+    // Actualizar publicaciones: reasignar solo los posts con cambios a Community, y avanzar los aprobados a Producción
     const hasGeneral = Boolean(generalComment && generalComment.trim());
-    const isAllAffected = affectedPosts.length === 0 && hasGeneral;
 
     const updatedPosts = posts.map(p => {
       if (p.odtId !== odtId) return p;
 
       const hasSpecificChange = changeMap.has(p.id);
       
-      if (hasSpecificChange || isAllAffected) {
+      if (hasSpecificChange) {
         // Preservar cualquier comentario específico previo del cliente si existe
-        const existingClientComment = p.aprobacionClienteCopy?.comment || '';
+        const existingClientComment = p.aprobacionClienteCopy?.status === 'Cambios Solicitados' ? p.aprobacionClienteCopy.comment : '';
         const specificComment = changeMap.get(p.id);
         
         let postCommentText = '';
@@ -1418,9 +1534,9 @@ export const App: React.FC = () => {
         };
       }
 
-      // Si el post NO tiene observaciones en este lote, pero ya estaba en "Cambios solicitados por Cliente",
+      // Si el post NO tiene observaciones en este lote, pero ya estaba previamente en "Cambios solicitados por Cliente",
       // conservar intactos sus comentarios previos y su estado
-      if (p.estado === 'Cambios solicitados por Cliente') {
+      if (p.estado === 'Cambios solicitados por Cliente' && p.aprobacionClienteCopy?.status !== 'Aprobado') {
         if (hasGeneral) {
           const generalPostComment: PostComment = {
             id: 'c-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
@@ -1440,46 +1556,17 @@ export const App: React.FC = () => {
         return p;
       }
 
-      // Si no tiene observaciones y está en estado de revisión por cliente:
-      if (tipo === 'COPY' && p.estado === 'Aprobación Copy Cliente') {
-        // Si hay una nota general de parrilla, no lo marcamos aprobado automáticamente; pasa a ajustes con la nota
-        if (hasGeneral) {
-          const postCommentText = `[Nota General de Parrilla]: ${generalComment.trim()}`;
-          const nextStatus: PostStatus = 'Cambios solicitados por Cliente';
-          const clientComment: PostComment = {
-            id: 'c-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-            userId: currentUser.id,
-            userName: currentUser.name,
-            userRole: currentUser.role,
-            text: `[Revisión COPY del Cliente]: ${postCommentText}`,
-            createdAt: getNowTimestamp(),
-            isClientVisible: true
-          };
-          const intervention = createIntervention(
-            currentUser,
-            'Cliente solicitó cambios en Copy (Parrilla General)',
-            postCommentText,
-            p.estado,
-            nextStatus
-          );
-          const disapprovalRecord = createApproval(currentUser, 'Cambios Solicitados', postCommentText);
-          return {
-            ...p,
-            estado: nextStatus,
-            areaResponsable: 'Community',
-            responsableActualName: targetOdt.communityName || 'Community Manager',
-            responsableActualId: targetOdt.communityId || '',
-            solicitadoPorRole: 'Cliente',
-            solicitadoPorName: currentUser.name,
-            solicitadoPorUserId: currentUser.id,
-            aprobacionClienteCopy: disapprovalRecord,
-            comentarios: [clientComment, ...p.comentarios],
-            historial: [intervention, ...p.historial],
-            updatedAt: getNowTimestamp()
-          };
-        }
-
-        const approvalRecord = createApproval(currentUser, 'Aprobado', 'Aprobado automáticamente en la ronda de revisión.');
+      // Si el post NO tiene observaciones en este lote y está en revisión de cliente (o fue previamente aprobado):
+      // ¡AVANZAR DIRECTAMENTE A PRODUCCIÓN TÉCNICA (ARTE / VIDEO)!
+      if (
+        tipo === 'COPY' && 
+        (p.estado === 'Aprobación Copy Cliente' || p.estado === 'Esperando Ejecutivo' || p.aprobacionClienteCopy?.status === 'Aprobado')
+      ) {
+        const approvalRecord = createApproval(
+          currentUser, 
+          'Aprobado', 
+          hasGeneral ? `Aprobado en ronda de revisión. Nota de parrilla: "${generalComment.trim()}"` : 'Aprobado en ronda de revisión por el cliente.'
+        );
         let nextStatus: PostStatus = 'Producción Arte';
         let nextArea = 'Arte';
         let nextRespName = targetOdt.disenadorName || 'Diseñador';
@@ -1505,20 +1592,41 @@ export const App: React.FC = () => {
           nextStatus
         );
 
+        const newPostComments: PostComment[] = hasGeneral ? [
+          {
+            id: 'c-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+            userId: currentUser.id,
+            userName: currentUser.name,
+            userRole: currentUser.role,
+            text: `[Nota General de Parrilla]: ${generalComment.trim()}`,
+            createdAt: getNowTimestamp(),
+            isClientVisible: true
+          },
+          ...p.comentarios
+        ] : p.comentarios;
+
         return {
           ...p,
           estado: nextStatus,
           areaResponsable: nextArea,
           responsableActualName: nextRespName,
           responsableActualId: nextRespId,
+          solicitadoPorRole: undefined,
+          solicitadoPorName: undefined,
+          solicitadoPorUserId: undefined,
           aprobacionClienteCopy: approvalRecord,
+          comentarios: newPostComments,
           historial: [intervention, ...p.historial],
           updatedAt: getNowTimestamp()
         };
       }
 
       if (tipo === 'MATERIAL' && (p.estado === 'Aprobación Interna Final' || p.estado === 'Aprobación Material Cliente')) {
-        const approvalRecord = createApproval(currentUser, 'Aprobado', 'Aprobado automáticamente en la ronda de revisión.');
+        const approvalRecord = createApproval(
+          currentUser, 
+          'Aprobado', 
+          hasGeneral ? `Material aprobado en ronda. Nota general: "${generalComment.trim()}"` : 'Materiales aprobados por el cliente.'
+        );
         const nextStatus: PostStatus = 'Listo para Publicar';
         const intervention = createIntervention(
           currentUser,
@@ -1534,6 +1642,9 @@ export const App: React.FC = () => {
           areaResponsable: 'Community',
           responsableActualName: targetOdt.communityName,
           responsableActualId: targetOdt.communityId,
+          solicitadoPorRole: undefined,
+          solicitadoPorName: undefined,
+          solicitadoPorUserId: undefined,
           aprobacionClienteMaterial: approvalRecord,
           historial: [intervention, ...p.historial],
           updatedAt: getNowTimestamp()
@@ -1892,6 +2003,7 @@ export const App: React.FC = () => {
             onRecyclePost={handleRecyclePost}
             onDeletePost={handleDeletePost}
             onUpdatePost={handleUpdatePostContent}
+            onUpdateOdt={handleUpdateOdt}
           />
         )}
 
@@ -1917,6 +2029,7 @@ export const App: React.FC = () => {
               setIsDetailOpen(true);
             }}
             onUpdatePost={handleUpdatePostContent}
+            onUpdateOdt={handleUpdateOdt}
             onDeletePost={handleDeletePost}
             onSendToReview={handleSendToReview}
             onDuplicatePost={handleDuplicatePost}

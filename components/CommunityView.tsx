@@ -28,6 +28,7 @@ interface CommunityViewProps {
   onSendToClientApproval?: (post: Post, odt: ODT) => void;
   onOpenApprovalModal?: (post: Post, type: 'aprobacion_interna_final' | 'esperando_ejecutivo') => void;
   onUpdatePost?: (postId: string, data: { copyIn?: string; copyOut?: string; enlaceReferencia?: string; enlaceMaterialFinal?: string }) => void;
+  onUpdateOdt?: (odtId: string, data: Partial<ODT>) => void;
   onDuplicatePost?: (post: Post, newRedSocial: string) => void;
   onRecyclePost?: (post: Post) => void;
   onDeletePost?: (postId: string) => void;
@@ -51,6 +52,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   onSendToClientApproval,
   onOpenApprovalModal,
   onUpdatePost,
+  onUpdateOdt,
   onDuplicatePost,
   onRecyclePost,
   onDeletePost
@@ -313,6 +315,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             onRecyclePost={onRecyclePost}
             onDeletePost={onDeletePost}
             onUpdatePost={onUpdatePost}
+            onUpdateOdt={onUpdateOdt}
           />
         </div>
       )}
@@ -552,7 +555,8 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             <div className="grid grid-cols-1 gap-3">
               {pendingActionPosts.map(post => {
                 const odt = odts.find(o => o.id === post.odtId);
-                const isClientChange = post.estado === 'Cambios solicitados por Cliente' || post.aprobacionClienteCopy?.status === 'Cambios Solicitados' || post.aprobacionClienteMaterial?.status === 'Cambios Solicitados' || post.solicitadoPorRole === 'Cliente';
+                const isClientChange = post.estado === 'Cambios solicitados por Cliente' || 
+                  (post.estado === 'Ajustes de Copy' && (post.aprobacionClienteCopy?.status === 'Cambios Solicitados' || post.solicitadoPorRole === 'Cliente'));
                 const isChanges = post.estado === 'Ajustes de Copy' || isClientChange || post.solicitadoPorRole !== undefined;
 
                 // Extraer dinámicamente la observación y el perfil exacto que solicitó ajustes
@@ -573,9 +577,9 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                   }
                   if (post.solicitadoPorRole === 'Cliente' || isClientChange) {
                     const clientComment = 
-                      post.aprobacionClienteCopy?.comment || 
-                      post.aprobacionClienteMaterial?.comment || 
-                      post.comentarios.find(c => c.text.includes('[Revisión') || c.userRole === 'Cliente')?.text;
+                      (post.aprobacionClienteCopy?.status === 'Cambios Solicitados' ? post.aprobacionClienteCopy?.comment : null) || 
+                      (post.aprobacionClienteMaterial?.status === 'Cambios Solicitados' ? post.aprobacionClienteMaterial?.comment : null) || 
+                      post.comentarios.find(c => (c.text.includes('[Revisión') || c.userRole === 'Cliente') && !c.text.toLowerCase().includes('aprobado'))?.text;
                     return {
                       label: `Comentario de Cliente (${post.aprobacionClienteCopy?.user || post.aprobacionClienteMaterial?.user || post.solicitadoPorName || 'Cliente'})`,
                       comment: clientComment || 'Se requieren ajustes solicitados por el cliente.',

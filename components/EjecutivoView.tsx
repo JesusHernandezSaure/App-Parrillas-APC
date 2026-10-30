@@ -162,6 +162,7 @@ interface EjecutivoViewProps {
   onRecyclePost?: (post: Post) => void;
   onDeletePost?: (postId: string) => void;
   onUpdatePost?: (postId: string, data: Partial<Post>) => void;
+  onUpdateOdt?: (odtId: string, data: Partial<ODT>) => void;
   canCreateOdt?: boolean;
   selectedClientId?: string;
   selectedOdtId?: string;
@@ -187,6 +188,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
   onRecyclePost,
   onDeletePost,
   onUpdatePost,
+  onUpdateOdt,
   canCreateOdt,
   selectedClientId,
   selectedOdtId,
@@ -1366,13 +1368,22 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                         </span>
                       </div>
 
-                      {/* Alerta si el cliente solicitó cambios en esta ODT */}
-                      {(odt.estadoAprobacionCopy === 'Cambios Solicitados' || odt.estadoAprobacionMaterial === 'Cambios Solicitados') && (
-                        <div className="px-2.5 py-1.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-800 text-xs font-bold flex items-center gap-1.5 animate-pulse shadow-2xs">
-                          <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                          <span>⚠️ Cliente solicitó cambios en {odt.estadoAprobacionCopy === 'Cambios Solicitados' ? 'Copy' : 'Material'}</span>
-                        </div>
-                      )}
+                      {/* Alerta si el cliente solicitó cambios en esta ODT y aún hay posts pendientes de ajuste */}
+                      {(odt.estadoAprobacionCopy === 'Cambios Solicitados' || odt.estadoAprobacionMaterial === 'Cambios Solicitados') && (() => {
+                        const pendingCount = odtPosts.filter(p => 
+                          p.estado === 'Cambios solicitados por Cliente' || 
+                          p.estado === 'Ajustes de Copy' || 
+                          (p.aprobacionClienteCopy?.status === 'Cambios Solicitados' && !['Producción Arte', 'Producción Audio/Video', 'Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado)) ||
+                          (p.aprobacionClienteMaterial?.status === 'Cambios Solicitados' && !['Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado))
+                        ).length;
+                        if (pendingCount === 0) return null;
+                        return (
+                          <div className="px-2.5 py-1.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-800 text-xs font-bold flex items-center gap-1.5 animate-pulse shadow-2xs">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span>⚠️ Cliente solicitó cambios ({pendingCount} post{pendingCount > 1 ? 's' : ''})</span>
+                          </div>
+                        );
+                      })()}
 
                       <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
                         {odt.brief}
@@ -1480,45 +1491,124 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
           </div>
 
           {/* Banner Destacado si el Cliente solicitó cambios en esta Parrilla */}
-          {(activeOdt.estadoAprobacionCopy === 'Cambios Solicitados' || activeOdt.estadoAprobacionMaterial === 'Cambios Solicitados') && (
-            <div className="p-4 rounded-2xl bg-rose-50/90 border-2 border-rose-300 text-rose-950 shadow-2xs space-y-2.5">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-xl bg-rose-600 text-white shadow-xs">
-                    <AlertTriangle className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black text-rose-950 flex items-center gap-2">
-                      ⚠️ El Cliente ha Solicitado Cambios en esta Parrilla
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-800">
-                        {activeOdt.estadoAprobacionCopy === 'Cambios Solicitados' ? 'Revisión de Copys' : 'Revisión de Materiales'}
-                      </span>
-                    </h4>
-                    <p className="text-xs text-rose-800 mt-0.5">
-                      {activeOdt.rondasAprobacion && activeOdt.rondasAprobacion.length > 0 ? (
-                        <>
-                          Última ronda registrada por <strong>{activeOdt.rondasAprobacion[activeOdt.rondasAprobacion.length - 1].usuarioName}</strong> el {activeOdt.rondasAprobacion[activeOdt.rondasAprobacion.length - 1].fecha}
-                        </>
-                      ) : (
-                        'El cliente ha devuelto la parrilla con observaciones pendientes de solventar.'
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <span className="text-xs font-black px-3 py-1 bg-white text-rose-700 rounded-lg border border-rose-300 shadow-2xs">
-                  {activeOdtPosts.filter(p => p.estado === 'Cambios solicitados por Cliente' || p.estado === 'Ajustes de Copy' || p.aprobacionClienteCopy?.status === 'Cambios Solicitados' || p.aprobacionClienteMaterial?.status === 'Cambios Solicitados').length} posts con ajustes pendientes
-                </span>
-              </div>
+          {(activeOdt.estadoAprobacionCopy === 'Cambios Solicitados' || activeOdt.estadoAprobacionMaterial === 'Cambios Solicitados') && (() => {
+            const pendingChangesPosts = activeOdtPosts.filter(p => 
+              p.estado === 'Cambios solicitados por Cliente' || 
+              p.estado === 'Ajustes de Copy' || 
+              (p.aprobacionClienteCopy?.status === 'Cambios Solicitados' && !['Producción Arte', 'Producción Audio/Video', 'Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado)) || 
+              (p.aprobacionClienteMaterial?.status === 'Cambios Solicitados' && !['Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado))
+            );
+            const pendingCount = pendingChangesPosts.length;
+            const latestRound = activeOdt.rondasAprobacion && activeOdt.rondasAprobacion.length > 0 
+              ? activeOdt.rondasAprobacion[activeOdt.rondasAprobacion.length - 1] 
+              : null;
 
-              {/* Comentario General del Cliente si existe */}
-              {activeOdt.rondasAprobacion && activeOdt.rondasAprobacion.length > 0 && activeOdt.rondasAprobacion[activeOdt.rondasAprobacion.length - 1].comentarioGeneral && (
-                <div className="bg-white p-3 rounded-xl border border-rose-200/80 text-xs text-slate-800">
-                  <span className="font-bold text-rose-900 block mb-0.5">Comentario General del Cliente:</span>
-                  <p className="italic font-medium leading-relaxed">"{activeOdt.rondasAprobacion[activeOdt.rondasAprobacion.length - 1].comentarioGeneral}"</p>
+            if (pendingCount === 0) {
+              return (
+                <div className="p-4 rounded-2xl bg-emerald-50/90 border border-emerald-300 text-emerald-950 shadow-2xs space-y-2.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-emerald-600 text-white shadow-xs">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-emerald-950 flex items-center gap-2">
+                          Observaciones de Copy Atendidas al 100%
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800">
+                            0 posts pendientes
+                          </span>
+                        </h4>
+                        <p className="text-xs text-emerald-800 mt-0.5">
+                          {latestRound ? (
+                            <>
+                              Revisión por <strong>{latestRound.usuarioName}</strong> ({latestRound.fecha}). Todas las publicaciones fueron autorizadas o completadas.
+                            </>
+                          ) : (
+                            'No hay publicaciones con ajustes pendientes en esta parrilla.'
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    {onUpdateOdt && (
+                      <button
+                        onClick={() => {
+                          onUpdateOdt(activeOdt.id, { estadoAprobacionCopy: 'Aprobada' });
+                        }}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                        title="Marcar parrilla como aprobada y quitar notificación"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Descartar Notificación</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {latestRound?.comentarioGeneral && (
+                    <div className="bg-white p-3 rounded-xl border border-emerald-200 text-xs text-slate-700">
+                      <span className="font-bold text-emerald-900 block mb-0.5">Comentario General del Cliente (Atendido):</span>
+                      <p className="italic font-medium leading-relaxed">"{latestRound.comentarioGeneral}"</p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
+              );
+            }
+
+            return (
+              <div className="p-4 rounded-2xl bg-rose-50/90 border-2 border-rose-300 text-rose-950 shadow-2xs space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-rose-600 text-white shadow-xs">
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-rose-950 flex items-center gap-2">
+                        ⚠️ El Cliente ha Solicitado Cambios en esta Parrilla
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-800">
+                          {activeOdt.estadoAprobacionCopy === 'Cambios Solicitados' ? 'Revisión de Copys' : 'Revisión de Materiales'}
+                        </span>
+                      </h4>
+                      <p className="text-xs text-rose-800 mt-0.5">
+                        {latestRound ? (
+                          <>
+                            Última ronda registrada por <strong>{latestRound.usuarioName}</strong> el {latestRound.fecha}
+                          </>
+                        ) : (
+                          'El cliente ha devuelto la parrilla con observaciones pendientes de solventar.'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-black px-3 py-1 bg-white text-rose-700 rounded-lg border border-rose-300 shadow-2xs">
+                      {pendingCount} post{pendingCount > 1 ? 's' : ''} con ajustes pendientes
+                    </span>
+                    {onUpdateOdt && (
+                      <button
+                        onClick={() => {
+                          if (confirm('¿Confirmas que el comentario general del cliente ya fue atendido o considerado para esta parrilla?')) {
+                            onUpdateOdt(activeOdt.id, { estadoAprobacionCopy: 'Aprobada' });
+                          }
+                        }}
+                        className="px-3 py-1 bg-white hover:bg-rose-100 text-rose-900 border border-rose-300 rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                        title="Marcar comentario general como atendido"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Marcar Atendido</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Comentario General del Cliente si existe */}
+                {latestRound?.comentarioGeneral && (
+                  <div className="bg-white p-3 rounded-xl border border-rose-200/80 text-xs text-slate-800">
+                    <span className="font-bold text-rose-900 block mb-0.5">Comentario General del Cliente:</span>
+                    <p className="italic font-medium leading-relaxed">"{latestRound.comentarioGeneral}"</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Balance de Pilares de la Parrilla */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs space-y-2.5">
@@ -1673,13 +1763,15 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                   const isInternalFinal = post.estado === 'Aprobación Interna Final';
                   const isClientChange = 
                     post.estado === 'Cambios solicitados por Cliente' ||
-                    post.aprobacionClienteCopy?.status === 'Cambios Solicitados' ||
-                    post.aprobacionClienteMaterial?.status === 'Cambios Solicitados';
+                    (post.estado === 'Ajustes de Copy' && post.solicitadoPorRole === 'Cliente') ||
+                    (post.aprobacionClienteCopy?.status === 'Cambios Solicitados' && !['Producción Arte', 'Producción Audio/Video', 'Listo para Publicar', 'Programado', 'Publicado'].includes(post.estado)) ||
+                    (post.aprobacionClienteMaterial?.status === 'Cambios Solicitados' && !['Listo para Publicar', 'Programado', 'Publicado'].includes(post.estado));
 
-                  const clientObservation = 
-                    post.aprobacionClienteCopy?.comment || 
-                    post.aprobacionClienteMaterial?.comment || 
-                    post.comentarios.find(c => c.text.includes('[Revisión') || c.userRole === 'Cliente')?.text;
+                  const clientObservation = isClientChange ? (
+                    (post.aprobacionClienteCopy?.status === 'Cambios Solicitados' ? post.aprobacionClienteCopy?.comment : null) || 
+                    (post.aprobacionClienteMaterial?.status === 'Cambios Solicitados' ? post.aprobacionClienteMaterial?.comment : null) || 
+                    post.comentarios.find(c => (c.text.includes('[Revisión') || c.userRole === 'Cliente') && !c.text.toLowerCase().includes('aprobado'))?.text
+                  ) : null;
 
                   return (
                     <div
@@ -1905,8 +1997,8 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Observación destacada del cliente si existe */}
-                      {clientObservation && (
+                      {/* Observación destacada del cliente si existe y el post realmente tiene cambios pendientes */}
+                      {isClientChange && clientObservation && (
                         <div className="p-3 rounded-xl bg-amber-50 border-2 border-amber-300 text-xs text-amber-950 flex items-start gap-2.5 shadow-2xs">
                           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
