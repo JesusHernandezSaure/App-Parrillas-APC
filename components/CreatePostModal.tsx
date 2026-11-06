@@ -647,11 +647,11 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           isOpen={isCalendarOpen}
           selectedDate={fechaPrevista}
           onChange={(newDate) => handlePubDateChange(newDate)}
-          posts={posts}
+          posts={posts.filter(p => p.odtId === odt.id)}
           currentPilar={pilar}
           availablePilares={availablePilares}
           onClose={() => setIsCalendarOpen(false)}
-          title={`Planificador de Publicación — ODT: ${odt.nombreParrilla}`}
+          title={`Planificador de Publicación — Parrilla: ${odt.nombreParrilla}`}
           odtId={odt.id}
           clientId={odt.clientId}
         />

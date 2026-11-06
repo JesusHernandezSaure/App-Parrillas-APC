@@ -1932,12 +1932,12 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           isOpen={isCalendarOpen}
           selectedDate={editFechaPrevista}
           onChange={(newDate) => setEditFechaPrevista(newDate)}
-          posts={posts}
+          posts={posts.filter(p => p.odtId === post.odtId)}
           currentPostId={post.id}
           currentPilar={editPilar}
           availablePilares={availablePilares}
           onClose={() => setIsCalendarOpen(false)}
-          title={`Planificador de Publicación — Post #${editNumeroInterno || post.numeroInterno}`}
+          title={`Planificador de Publicación — Parrilla: ${odt?.nombreParrilla || `Post #${editNumeroInterno || post.numeroInterno}`}`}
           odtId={post.odtId}
           clientId={post.clientId}
         />

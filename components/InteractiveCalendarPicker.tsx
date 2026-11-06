@@ -177,10 +177,16 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
   const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay(); // 0 is Sun, 1 is Mon...
   const startingOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Ajustado a Lunes = 0
 
-  // Mapa de posts por fecha
+  // Filtrar estrictamente por la parrilla (ODT) en la que se está creando o editando el post
+  const parrillaPosts = useMemo(() => {
+    if (!odtId) return posts;
+    return posts.filter(p => p.odtId === odtId);
+  }, [posts, odtId]);
+
+  // Mapa de posts por fecha (únicamente pertenecientes a esta parrilla)
   const postsByDateMap = useMemo(() => {
     const map = new Map<string, Post[]>();
-    posts.forEach(p => {
+    parrillaPosts.forEach(p => {
       // Excluir el post actual que se está editando o cancelados
       if (p.id === currentPostId || p.estado === 'Cancelado' || !p.fechaPrevista) return;
       const dateKey = p.fechaPrevista.trim();
@@ -188,9 +194,9 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
       map.set(dateKey, [...existing, p]);
     });
     return map;
-  }, [posts, currentPostId]);
+  }, [parrillaPosts, currentPostId]);
 
-  // Lista consolidada de pilares disponibles para la leyenda y filtros
+  // Lista consolidada de pilares disponibles para la leyenda y filtros (específicos de esta parrilla)
   const allPilaresList = useMemo(() => {
     const set = new Set<string>();
     if (availablePilares && availablePilares.length > 0) {
@@ -198,24 +204,24 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
     } else {
       DEFAULT_PILARES.forEach(p => set.add(p));
     }
-    // Agregar pilares que ya existan en los posts
-    posts.forEach(p => {
+    // Agregar pilares que ya existan en los posts de esta parrilla
+    parrillaPosts.forEach(p => {
       if (p.pilar && p.pilar.trim()) set.add(p.pilar.trim());
     });
     return Array.from(set);
-  }, [availablePilares, posts]);
+  }, [availablePilares, parrillaPosts]);
 
   // Información del día sobrevolado con el ratón
   const hoveredInfo = useMemo(() => {
     if (!hoveredDay) return null;
     const dayPosts = postsByDateMap.get(hoveredDay) || [];
 
-    // Comprobar si hay conflicto directo de pilar con el post que se está creando/editando
+    // Comprobar si hay conflicto directo de pilar con el post que se está creando/editando en esta parrilla
     const hasSamePilarConflict = !!currentPilar && dayPosts.some(
       p => p.pilar && p.pilar.trim().toLowerCase() === currentPilar.trim().toLowerCase()
     );
 
-    // Calcular posts de la misma semana (Lunes a Domingo)
+    // Calcular posts de la misma semana (Lunes a Domingo) en esta parrilla
     const [y, m, d] = hoveredDay.split('-').map(Number);
     const targetDate = new Date(y, m - 1, d);
     const dayOfWeek = targetDate.getDay();
@@ -233,7 +239,7 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
       weekPosts.push(...ps);
     }
 
-    // Desglose de pilares de esa semana
+    // Desglose de pilares de esa semana en esta parrilla
     const weekPilarCounts: Record<string, number> = {};
     weekPosts.forEach(p => {
       const pil = p.pilar || 'Sin pilar';
@@ -272,9 +278,15 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
                     Pilar a programar: <span className="underline decoration-indigo-400">{currentPilar}</span>
                   </span>
                 )}
+                <span className="text-[11px] font-extrabold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-900 border border-indigo-200 shadow-2xs flex items-center gap-1">
+                  <span>🎯 Solo esta Parrilla</span>
+                  <span className="font-mono text-indigo-700 bg-white/80 px-1.5 py-0.2 rounded-full text-[10px]">
+                    {parrillaPosts.length} post{parrillaPosts.length === 1 ? '' : 's'}
+                  </span>
+                </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Código de color por pilar en cada fecha. Pasa el cursor para ver el detalle y evitar repetir pilares el mismo día.
+                Mostrando únicamente los pilares y posts de esta parrilla. Pasa el cursor para ver el detalle y balancear las fechas.
               </p>
             </div>
           </div>
@@ -572,9 +584,9 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
                         <div className="mb-2 p-2 rounded-xl bg-rose-950/80 border border-rose-500 text-rose-200 text-xs flex items-start gap-2">
                           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                           <div className="leading-tight">
-                            <p className="font-extrabold text-rose-300">¡Advertencia de Repetición!</p>
+                            <p className="font-extrabold text-rose-300">¡Advertencia de Repetición en esta Parrilla!</p>
                             <p className="text-[11px] text-rose-200 mt-0.5">
-                              Este día ya tiene un post con el pilar <strong className="underline text-white font-bold">{currentPilar}</strong>. Elige otra fecha o varía el pilar para no saturar a la audiencia.
+                              Esta parrilla ya tiene programado un post con el pilar <strong className="underline text-white font-bold">{currentPilar}</strong> este mismo día. Elige otra fecha o varía el pilar para no saturar a la audiencia.
                             </p>
                           </div>
                         </div>
@@ -583,14 +595,14 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
                       {!hasPilarConflict && hasPosts && currentPilar && (
                         <div className="mb-2 p-1.5 rounded-xl bg-blue-950/60 border border-blue-500/40 text-blue-200 text-[11px] flex items-center gap-1.5">
                           <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                          <span>Pilar <strong>"{currentPilar}"</strong> disponible en esta fecha.</span>
+                          <span>Pilar <strong>"{currentPilar}"</strong> libre en esta parrilla para esta fecha.</span>
                         </div>
                       )}
 
                       {!hasPosts && (
                         <div className="p-2 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2">
                           <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <span>Fecha totalmente disponible. Haz clic para programar este día.</span>
+                          <span>Fecha totalmente disponible en esta parrilla. Haz clic para programar.</span>
                         </div>
                       )}
 
@@ -660,10 +672,10 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
                     : 'bg-emerald-100 text-emerald-900 border-emerald-300'
                 }`}>
                   {hoveredInfo.hasSamePilarConflict
-                    ? `⚠️ Conflicto: Ya existe post con pilar "${currentPilar}"`
+                    ? `⚠️ Conflicto: Ya existe post con pilar "${currentPilar}" en esta parrilla`
                     : hoveredInfo.dayPosts.length > 0 
-                    ? `${hoveredInfo.dayPosts.length} post(s) programados` 
-                    : '✨ Fecha Libre (Sin posts programados)'}
+                    ? `${hoveredInfo.dayPosts.length} post(s) en esta parrilla` 
+                    : '✨ Fecha Libre (Sin posts en esta parrilla)'}
                 </span>
               </div>
 
