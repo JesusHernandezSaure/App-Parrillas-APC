@@ -121,6 +121,7 @@
         "fechaRealPublicacion": { "type": "string" },
         "urlPublicacion": { "type": "string" },
         "enlacesPublicacion": { "type": "array" },
+        "observacionClienteAtendida": { "type": "object" },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },

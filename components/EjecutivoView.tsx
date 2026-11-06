@@ -13,6 +13,7 @@ import {
 import { RichTextDisplay, stripHtml } from './RichTextDisplay';
 import { PostContentFourPanels } from './PostContentFourPanels';
 import { getPilarColor } from './InteractiveCalendarPicker';
+import { ResolveObservationModal } from './ResolveObservationModal';
 
 export type Level3StageKey = 'all' | 'copy' | 'correction' | 'waiting_exec' | 'with_client' | 'production' | 'ready_publish' | 'published' | 'delayed';
 
@@ -163,6 +164,7 @@ interface EjecutivoViewProps {
   onDeletePost?: (postId: string) => void;
   onUpdatePost?: (postId: string, data: Partial<Post>) => void;
   onUpdateOdt?: (odtId: string, data: Partial<ODT>) => void;
+  onResolveClientObservation?: (post: Post, nota: string, revert?: boolean) => void;
   canCreateOdt?: boolean;
   selectedClientId?: string;
   selectedOdtId?: string;
@@ -189,6 +191,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
   onDeletePost,
   onUpdatePost,
   onUpdateOdt,
+  onResolveClientObservation,
   canCreateOdt,
   selectedClientId,
   selectedOdtId,
@@ -200,12 +203,14 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
   const [selectedFunnelStage, setSelectedFunnelStage] = useState<string | null>(null);
   const [pacingFilter, setPacingFilter] = useState<string>('all');
   const [duplicatingPost, setDuplicatingPost] = useState<Post | null>(null);
+  const [resolvingPost, setResolvingPost] = useState<Post | null>(null);
   const [targetDuplicateRed, setTargetDuplicateRed] = useState('Instagram');
 
   // Estados para el Panel Adaptativo de 3 Niveles
   const [selectedPeriod, setSelectedPeriod] = useState<string>('current');
   const [selectedOdtCardFilter, setSelectedOdtCardFilter] = useState<'all' | 'created' | 'to_publish' | 'published' | 'carry_over'>('all');
   const [selectedLevel3Stage, setSelectedLevel3Stage] = useState<Level3StageKey>('all');
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   const isOdtCreator = canCreateOdt !== false && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin');
   const canEditOdt = Boolean(currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin' || currentUser.permissions?.canEditOdt);
@@ -430,7 +435,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
 
 
   const isOdtPublished = (odt: ODT) => {
-    if (odt.estadoGeneral === 'Completado' || odt.estadoGeneral === 'Publicado') return true;
+    if (odt.estadoGeneral === 'Completado') return true;
     const odtPosts = posts.filter(p => p.odtId === odt.id);
     return odtPosts.length > 0 && odtPosts.every(p => p.publicado || p.estado === 'Publicado');
   };
@@ -1490,6 +1495,22 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
             </div>
           </div>
 
+          {/* Mensaje de feedback de acciones rápidas */}
+          {actionFeedback && (
+            <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-2xl text-xs font-bold flex items-center justify-between shadow-2xs animate-fade-in">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{actionFeedback}</span>
+              </div>
+              <button 
+                onClick={() => setActionFeedback(null)}
+                className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-2 py-0.5 rounded-md hover:bg-emerald-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Banner Destacado si el Cliente solicitó cambios en esta Parrilla */}
           {(activeOdt.estadoAprobacionCopy === 'Cambios Solicitados' || activeOdt.estadoAprobacionMaterial === 'Cambios Solicitados') && (() => {
             const pendingChangesPosts = activeOdtPosts.filter(p => 
@@ -1532,9 +1553,14 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                     {onUpdateOdt && (
                       <button
                         onClick={() => {
-                          onUpdateOdt(activeOdt.id, { estadoAprobacionCopy: 'Aprobada' });
+                          onUpdateOdt(activeOdt.id, { 
+                            estadoAprobacionCopy: 'Aprobada',
+                            estadoAprobacionMaterial: 'Aprobada'
+                          });
+                          setActionFeedback('Notificación descartada. Parrilla al día.');
+                          setTimeout(() => setActionFeedback(null), 4000);
                         }}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95"
                         title="Marcar parrilla como aprobada y quitar notificación"
                       >
                         <Check className="w-3.5 h-3.5" />
@@ -1585,15 +1611,18 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                     {onUpdateOdt && (
                       <button
                         onClick={() => {
-                          if (confirm('¿Confirmas que el comentario general del cliente ya fue atendido o considerado para esta parrilla?')) {
-                            onUpdateOdt(activeOdt.id, { estadoAprobacionCopy: 'Aprobada' });
-                          }
+                          onUpdateOdt(activeOdt.id, { 
+                            estadoAprobacionCopy: 'Aprobada',
+                            estadoAprobacionMaterial: 'Aprobada'
+                          });
+                          setActionFeedback('Comentario general marcado como atendido. Notificación de la parrilla actualizada.');
+                          setTimeout(() => setActionFeedback(null), 4000);
                         }}
-                        className="px-3 py-1 bg-white hover:bg-rose-100 text-rose-900 border border-rose-300 rounded-lg text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
-                        title="Marcar comentario general como atendido"
+                        className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+                        title="Marcar comentario general como atendido y descartar notificación de cambios"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        <span>Marcar Atendido</span>
+                        <span>Marcar como Atendido</span>
                       </button>
                     )}
                   </div>
@@ -1867,9 +1896,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                           {onRecyclePost && post.estado !== 'Borrador' && (
                             <button
                               onClick={() => {
-                                if (confirm(`¿Retomar y reciclar este post #${post.numeroInterno}?\n\nEl post regresará a la posición inicial (Borrador) para que el Community pueda cambiar el enfoque, adaptar el copy o redefinir el material.`)) {
-                                  onRecyclePost(post);
-                                }
+                                onRecyclePost(post);
                               }}
                               className="p-1.5 text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-300 transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer"
                               title="Atraer post al inicio para nuevo enfoque"
@@ -1947,11 +1974,11 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                             </button>
                           )}
 
-                          {/* Botón de Intervención / Reasignación de Supervisor (Exclusivo Ejecutivo / Admin / Super Admin) */}
-                          {(currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && (
+                          {/* Botón de Intervención / Reasignación de Etapa (Community / Ejecutivo / Admin / Super Admin) */}
+                          {(currentUser.role === 'Community' || currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && (
                             <button
                               onClick={() => onOpenIntervention(post)}
-                              title="Intervención manual de supervisor (Reasignar o Devolver)"
+                              title="Intervención manual (Reasignar o Devolver etapa)"
                               className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-slate-200 transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer"
                             >
                               <ShieldAlert className="w-4 h-4 text-indigo-500" />
@@ -1997,20 +2024,69 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Observación destacada del cliente si existe y el post realmente tiene cambios pendientes */}
-                      {isClientChange && clientObservation && (
-                        <div className="p-3 rounded-xl bg-amber-50 border-2 border-amber-300 text-xs text-amber-950 flex items-start gap-2.5 shadow-2xs">
-                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                          <div className="flex-1 min-w-0">
-                            <span className="font-bold text-amber-900 block mb-0.5">
-                              Observación del Cliente ({post.aprobacionClienteCopy?.user || post.aprobacionClienteMaterial?.user || 'Cliente'}):
-                            </span>
-                            <p className="italic text-amber-950 font-medium leading-relaxed">
-                              "{clientObservation}"
-                            </p>
+                      {/* Observación del cliente: Atendida (Verificada) vs Pendiente */}
+                      {post.observacionClienteAtendida?.atendido ? (
+                        <div className="p-3 rounded-xl bg-emerald-50/90 border border-emerald-300 text-xs text-emerald-950 flex items-start justify-between gap-3 shadow-2xs">
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-emerald-900">
+                                  ✓ Observación del Cliente Atendida
+                                </span>
+                                <span className="text-[10px] text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">
+                                  {post.observacionClienteAtendida.atendidoPor} ({post.observacionClienteAtendida.atendidoPorRole}) • {post.observacionClienteAtendida.fecha}
+                                </span>
+                              </div>
+                              {clientObservation && (
+                                <p className="italic text-slate-500 text-[11px] line-through leading-relaxed">
+                                  "{clientObservation}"
+                                </p>
+                              )}
+                              {post.observacionClienteAtendida.nota && (
+                                <p className="text-emerald-950 bg-white/90 p-2 rounded-lg border border-emerald-200 text-[11px] leading-relaxed">
+                                  <strong>Evidencia / Corrección aplicada:</strong> {post.observacionClienteAtendida.nota}
+                                </p>
+                              )}
+                            </div>
                           </div>
+                          {(currentUser.role === 'Community' || currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && onResolveClientObservation && (
+                            <button
+                              type="button"
+                              onClick={() => onResolveClientObservation(post, '', true)}
+                              title="Reabrir observación si se requieren más ajustes"
+                              className="text-[11px] text-slate-400 hover:text-slate-600 underline shrink-0 cursor-pointer pt-0.5"
+                            >
+                              Reabrir
+                            </button>
+                          )}
                         </div>
-                      )}
+                      ) : isClientChange && clientObservation ? (
+                        <div className="p-3 rounded-xl bg-amber-50 border-2 border-amber-300 text-xs text-amber-950 flex items-start justify-between gap-3 shadow-2xs">
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <span className="font-bold text-amber-900 block mb-0.5">
+                                Observación del Cliente ({post.aprobacionClienteCopy?.user || post.aprobacionClienteMaterial?.user || 'Cliente'}):
+                              </span>
+                              <p className="italic text-amber-950 font-medium leading-relaxed">
+                                "{clientObservation}"
+                              </p>
+                            </div>
+                          </div>
+                          {(currentUser.role === 'Community' || currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && onResolveClientObservation && (
+                            <button
+                              type="button"
+                              onClick={() => setResolvingPost(post)}
+                              className="shrink-0 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                              title="Marcar que el cambio solicitado por el cliente ya fue realizado en el copy"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Marcar como Atendida</span>
+                            </button>
+                          )}
+                        </div>
+                      ) : null}
 
                       {/* Espacio Central en 4 Divisiones: Copy In, Copy Out, Enlace de Referencia, Material Entregado Arte/AV */}
                       <PostContentFourPanels 
@@ -2110,6 +2186,20 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL PARA REGISTRAR ATENCIÓN DE OBSERVACIÓN DEL CLIENTE */}
+      {resolvingPost && (
+        <ResolveObservationModal
+          post={resolvingPost}
+          currentUser={currentUser}
+          onClose={() => setResolvingPost(null)}
+          onConfirm={(post, nota) => {
+            if (onResolveClientObservation) {
+              onResolveClientObservation(post, nota);
+            }
+          }}
+        />
       )}
 
     </div>

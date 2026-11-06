@@ -154,6 +154,7 @@ export interface ApprovalRecord {
   userId?: string;
   date: string;
   comment?: string;
+  approvedAt?: string;
 }
 
 export interface PostComment {
@@ -242,6 +243,17 @@ export interface Post {
   fechaRealPublicacion?: string;
   urlPublicacion?: string;
   enlacesPublicacion?: PostPublicationLink[];
+  observacionClienteAtendida?: PostObservationResolution;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PostObservationResolution {
+  atendido: boolean;
+  atendidoPor: string;
+  atendidoPorId: string;
+  atendidoPorRole: UserRole;
+  fecha: string;
+  nota?: string;
+  comentarioOriginal?: string;
 }

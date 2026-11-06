@@ -9,6 +9,7 @@ import { EjecutivoView } from './EjecutivoView';
 import { RichTextDisplay } from './RichTextDisplay';
 import { PostContentFourPanels } from './PostContentFourPanels';
 import { getPilarColor } from './InteractiveCalendarPicker';
+import { ResolveObservationModal } from './ResolveObservationModal';
 
 interface CommunityViewProps {
   odts: ODT[];
@@ -32,6 +33,7 @@ interface CommunityViewProps {
   onDuplicatePost?: (post: Post, newRedSocial: string) => void;
   onRecyclePost?: (post: Post) => void;
   onDeletePost?: (postId: string) => void;
+  onResolveClientObservation?: (post: Post, nota: string, revert?: boolean) => void;
 }
 
 export const CommunityView: React.FC<CommunityViewProps> = ({
@@ -55,7 +57,8 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   onUpdateOdt,
   onDuplicatePost,
   onRecyclePost,
-  onDeletePost
+  onDeletePost,
+  onResolveClientObservation
 }) => {
   // Por defecto abrimos la vista de gestión integral de Parrillas & Posts solicitada
   const [activeTab, setActiveTab] = useState<'parrillas' | 'todo' | 'ready_to_publish' | 'published'>('parrillas');
@@ -64,8 +67,9 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   const [localClientId, setLocalClientId] = useState<string | null>(selectedClientId || null);
   const [localOdtId, setLocalOdtId] = useState<string | null>(selectedOdtId || null);
 
-  // Modal rápido de duplicación
+  // Modal rápido de duplicación y atención de observaciones
   const [duplicatingPost, setDuplicatingPost] = useState<Post | null>(null);
+  const [resolvingPost, setResolvingPost] = useState<Post | null>(null);
   const [targetDuplicateRed, setTargetDuplicateRed] = useState('Instagram');
 
   const activeClientId = selectedClientId !== undefined ? selectedClientId : localClientId;
@@ -316,6 +320,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             onDeletePost={onDeletePost}
             onUpdatePost={onUpdatePost}
             onUpdateOdt={onUpdateOdt}
+            onResolveClientObservation={onResolveClientObservation}
           />
         </div>
       )}
@@ -517,12 +522,14 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
 
           {/* Banner de alerta si hay posts devueltos con observaciones o cambios solicitados */}
           {pendingActionPosts.filter(p => 
-            p.estado === 'Ajustes de Copy' || 
-            p.estado === 'Cambios solicitados por Cliente' || 
-            p.solicitadoPorRole !== undefined ||
-            p.aprobacionCorreccionCopy?.status === 'Cambios Solicitados' || 
-            p.aprobacionMedica?.status === 'Cambios Solicitados' ||
-            p.aprobacionClienteCopy?.status === 'Cambios Solicitados'
+            !p.observacionClienteAtendida?.atendido && (
+              p.estado === 'Ajustes de Copy' || 
+              p.estado === 'Cambios solicitados por Cliente' || 
+              p.solicitadoPorRole !== undefined ||
+              p.aprobacionCorreccionCopy?.status === 'Cambios Solicitados' || 
+              p.aprobacionMedica?.status === 'Cambios Solicitados' ||
+              p.aprobacionClienteCopy?.status === 'Cambios Solicitados'
+            )
           ).length > 0 && (
             <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex items-start gap-3 shadow-2xs">
               <div className="p-2 rounded-xl bg-amber-600 text-white shrink-0 mt-0.5">
@@ -531,12 +538,14 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
               <div className="text-xs space-y-1">
                 <p className="font-black text-sm text-amber-950">
                   {pendingActionPosts.filter(p => 
-                    p.estado === 'Ajustes de Copy' || 
-                    p.estado === 'Cambios solicitados por Cliente' || 
-                    p.solicitadoPorRole !== undefined ||
-                    p.aprobacionCorreccionCopy?.status === 'Cambios Solicitados' || 
-                    p.aprobacionMedica?.status === 'Cambios Solicitados' ||
-                    p.aprobacionClienteCopy?.status === 'Cambios Solicitados'
+                    !p.observacionClienteAtendida?.atendido && (
+                      p.estado === 'Ajustes de Copy' || 
+                      p.estado === 'Cambios solicitados por Cliente' || 
+                      p.solicitadoPorRole !== undefined ||
+                      p.aprobacionCorreccionCopy?.status === 'Cambios Solicitados' || 
+                      p.aprobacionMedica?.status === 'Cambios Solicitados' ||
+                      p.aprobacionClienteCopy?.status === 'Cambios Solicitados'
+                    )
                   ).length} publicación(es) con Observaciones o Cambios Solicitados
                 </p>
                 <p className="text-amber-900 leading-relaxed">
@@ -677,6 +686,18 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
+                        {onOpenIntervention && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenIntervention(post)}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-700 bg-white hover:bg-indigo-50 border border-slate-200 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                            title="Intervención manual de etapa o reasignación"
+                          >
+                            <ShieldAlert className="w-3.5 h-3.5 text-indigo-500" />
+                            <span>Intervenir</span>
+                          </button>
+                        )}
+
                         {onDuplicatePost && (
                           <button
                             onClick={() => {
@@ -694,9 +715,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                         {onRecyclePost && post.estado !== 'Borrador' && (
                           <button
                             onClick={() => {
-                              if (confirm(`¿Retomar y reciclar este post #${post.numeroInterno}?\n\nRegresará al inicio del flujo (Borrador) para que puedas adaptar el copy o cambiar el requerimiento de material.`)) {
-                                onRecyclePost(post);
-                              }
+                              onRecyclePost(post);
                             }}
                             className="px-2.5 py-1.5 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
                             title="Atraer post al inicio para nuevo enfoque"
@@ -748,27 +767,77 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       canEdit={true}
                     />
 
-                    {obsData && (
-                      <div className={`p-3.5 rounded-xl border-2 text-xs flex items-start gap-2.5 shadow-2xs ${
+                    {/* Observación Atendida vs Pendiente */}
+                    {post.observacionClienteAtendida?.atendido ? (
+                      <div className="p-3.5 rounded-xl bg-emerald-50/90 border border-emerald-300 text-xs text-emerald-950 flex items-start justify-between gap-3 shadow-2xs">
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-emerald-900">
+                                ✓ Observación del Cliente Atendida
+                              </span>
+                              <span className="text-[10px] text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">
+                                {post.observacionClienteAtendida.atendidoPor} ({post.observacionClienteAtendida.atendidoPorRole}) • {post.observacionClienteAtendida.fecha}
+                              </span>
+                            </div>
+                            {obsData?.comment && (
+                              <p className="italic text-slate-500 text-[11px] line-through leading-relaxed">
+                                "{obsData.comment}"
+                              </p>
+                            )}
+                            {post.observacionClienteAtendida.nota && (
+                              <p className="text-emerald-950 bg-white/90 p-2 rounded-lg border border-emerald-200 text-[11px] leading-relaxed">
+                                <strong>Evidencia / Corrección aplicada:</strong> {post.observacionClienteAtendida.nota}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {onResolveClientObservation && (
+                          <button
+                            type="button"
+                            onClick={() => onResolveClientObservation(post, '', true)}
+                            title="Reabrir observación si se requieren más ajustes"
+                            className="text-[11px] text-slate-400 hover:text-slate-600 underline shrink-0 cursor-pointer pt-0.5"
+                          >
+                            Reabrir
+                          </button>
+                        )}
+                      </div>
+                    ) : obsData && (
+                      <div className={`p-3.5 rounded-xl border-2 text-xs flex items-start justify-between gap-3 shadow-2xs ${
                         obsData.theme === 'rose'
                           ? 'bg-rose-50 border-rose-300 text-rose-950'
                           : obsData.theme === 'blue'
                           ? 'bg-blue-50 border-blue-300 text-blue-950'
                           : 'bg-amber-50 border-amber-300 text-amber-950'
                       }`}>
-                        <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${
-                          obsData.theme === 'rose' ? 'text-rose-600' : obsData.theme === 'blue' ? 'text-blue-600' : 'text-amber-600'
-                        }`} />
-                        <div className="flex-1 min-w-0">
-                          <span className={`font-bold block mb-0.5 ${
-                            obsData.theme === 'rose' ? 'text-rose-900' : obsData.theme === 'blue' ? 'text-blue-900' : 'text-amber-900'
-                          }`}>
-                            {obsData.label}:
-                          </span>
-                          <p className="italic font-medium leading-relaxed">
-                            "{obsData.comment}"
-                          </p>
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${
+                            obsData.theme === 'rose' ? 'text-rose-600' : obsData.theme === 'blue' ? 'text-blue-600' : 'text-amber-600'
+                          }`} />
+                          <div className="flex-1 min-w-0">
+                            <span className={`font-bold block mb-0.5 ${
+                              obsData.theme === 'rose' ? 'text-rose-900' : obsData.theme === 'blue' ? 'text-blue-900' : 'text-amber-900'
+                            }`}>
+                              {obsData.label}:
+                            </span>
+                            <p className="italic font-medium leading-relaxed">
+                              "{obsData.comment}"
+                            </p>
+                          </div>
                         </div>
+                        {(obsData.theme === 'rose' || post.solicitadoPorRole === 'Cliente') && onResolveClientObservation && (
+                          <button
+                            type="button"
+                            onClick={() => setResolvingPost(post)}
+                            className="shrink-0 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                            title="Marcar que el cambio solicitado por el cliente ya fue realizado en el copy"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Marcar como Atendida</span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -961,6 +1030,20 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal para Atender y Dejar Evidencia de Observación del Cliente */}
+      {resolvingPost && (
+        <ResolveObservationModal
+          post={resolvingPost}
+          currentUser={currentUser}
+          onClose={() => setResolvingPost(null)}
+          onConfirm={(post, nota) => {
+            if (onResolveClientObservation) {
+              onResolveClientObservation(post, nota);
+            }
+          }}
+        />
       )}
 
     </div>

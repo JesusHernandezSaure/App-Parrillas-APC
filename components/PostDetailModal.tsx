@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Post, ODT, User, PostComment, MaterialType, PostDimensions, PriorityLevel, DEFAULT_PILARES } from '../types';
 import { 
-  X, CheckCircle2, Clock, AlertTriangle, ExternalLink, ShieldCheck, 
+  X, CheckCircle2, Clock, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert,
   MessageSquare, Send, History, ArrowRight, UserCircle2, Eye, EyeOff,
   Edit3, Save, Check, Copy, RefreshCw, Calendar, Sparkles, Globe, Share2, Trash2,
   Stethoscope, Palette, Video, Layers, Plus
@@ -11,6 +11,7 @@ import { PostStageMap } from './PostPipelineTracker';
 import { RichTextEditor } from './RichTextEditor';
 import { RichTextDisplay } from './RichTextDisplay';
 import { InteractiveCalendarPicker, getPilarColor } from './InteractiveCalendarPicker';
+import { ResolveObservationModal } from './ResolveObservationModal';
 
 interface PostDetailModalProps {
   post: Post;
@@ -45,6 +46,7 @@ interface PostDetailModalProps {
   onDuplicatePost?: (post: Post, newRedSocial: string) => void;
   onRecyclePost?: (post: Post) => void;
   onOpenPublishModal?: (post: Post) => void;
+  onResolveClientObservation?: (post: Post, nota: string, revert?: boolean) => void;
   initialEditMode?: boolean;
 }
 
@@ -71,12 +73,14 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   onDuplicatePost,
   onRecyclePost,
   onOpenPublishModal,
+  onResolveClientObservation,
   initialEditMode
 }) => {
   const [activeTab, setActiveTab] = useState<'content' | 'approvals' | 'comments' | 'history'>('content');
   const [newCommentText, setNewCommentText] = useState('');
   const [isClientVisible, setIsClientVisible] = useState(currentUser.role === 'Cliente');
   const [copiedLinkIndex, setCopiedLinkIndex] = useState<number | null>(null);
+  const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
 
   const handleCopyLink = (url: string, index: number) => {
     if (navigator?.clipboard?.writeText) {
@@ -312,12 +316,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   };
 
   const handleTriggerRecycle = () => {
-    if (confirm(`¿Retomar y reciclar este post #${post.numeroInterno}?\n\nEl post regresará a Borrador bajo la responsabilidad del Community para que puedas cambiar el enfoque, adaptar el copy o redefinir el material.`)) {
-      if (onRecyclePost) {
-        onRecyclePost(post);
-        setIsEditing(true);
-        setActiveTab('content');
-      }
+    if (onRecyclePost) {
+      onRecyclePost(post);
+      setIsEditing(true);
+      setActiveTab('content');
     }
   };
 
@@ -470,15 +472,16 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   </button>
                 )}
 
-                {/* Botón Intervenir Supervisor */}
-                {!isClient && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && onOpenIntervention && (
+                {/* Botón Intervenir (Community / Ejecutivo / Admin / Super Admin) */}
+                {!isClient && (currentUser.role === 'Community' || currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && onOpenIntervention && (
                   <button
                     type="button"
                     onClick={onOpenIntervention}
-                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer shrink-0"
-                    title="Intervención manual de supervisor"
+                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer shrink-0 flex items-center gap-1"
+                    title="Intervención manual de etapa o reasignación"
                   >
-                    Intervenir
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>Intervenir</span>
                   </button>
                 )}
 
@@ -675,19 +678,76 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   }
                 }[obs.theme];
 
+                // Si la observación ya fue marcada como atendida, mostrar el estado verificado con evidencia
+                if (post.observacionClienteAtendida?.atendido) {
+                  return (
+                    <div className="p-4 rounded-xl flex items-start justify-between gap-3 shadow-2xs bg-emerald-50 border-2 border-emerald-300 text-emerald-950">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <div className="p-2 rounded-lg shrink-0 mt-0.5 bg-emerald-600 text-white shadow-xs">
+                          <CheckCircle2 className="w-5 h-5" />
+                        </div>
+                        <div className="text-xs space-y-1.5 flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="font-black text-sm text-emerald-900">
+                              ✓ Observación del Cliente Atendida y Aplicada
+                            </span>
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full border text-emerald-800 bg-emerald-100 border-emerald-200">
+                              {post.observacionClienteAtendida.atendidoPor} ({post.observacionClienteAtendida.atendidoPorRole}) • {post.observacionClienteAtendida.fecha}
+                            </span>
+                          </div>
+                          {obs.comment && (
+                            <p className="italic text-slate-500 line-through text-[11px] bg-white/60 p-2 rounded-lg border border-emerald-100 leading-relaxed">
+                              "{obs.comment}"
+                            </p>
+                          )}
+                          {post.observacionClienteAtendida.nota && (
+                            <p className="text-emerald-950 bg-white/90 p-2.5 rounded-lg border border-emerald-200 leading-relaxed font-medium">
+                              <strong>Evidencia / Corrección realizada:</strong> {post.observacionClienteAtendida.nota}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {!isClient && (currentUser.role === 'Community' || currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && onResolveClientObservation && (
+                        <button
+                          type="button"
+                          onClick={() => onResolveClientObservation(post, '', true)}
+                          className="text-xs text-slate-400 hover:text-slate-600 underline shrink-0 cursor-pointer pt-1"
+                        >
+                          Reabrir
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+
+                const isClientObservation = obs.theme === 'rose' || post.solicitadoPorRole === 'Cliente';
+
                 return (
                   <div className={`p-4 rounded-xl flex items-start gap-3 shadow-2xs ${themeStyles.container}`}>
                     <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${themeStyles.iconBg}`}>
                       <AlertTriangle className="w-5 h-5" />
                     </div>
-                    <div className="text-xs space-y-1 flex-1 min-w-0">
+                    <div className="text-xs space-y-1.5 flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <span className="font-black text-sm">
                           ⚠️ {obs.title}
                         </span>
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${themeStyles.badge}`}>
-                          {obs.date}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${themeStyles.badge}`}>
+                            {obs.date}
+                          </span>
+                          {!isClient && isClientObservation && (currentUser.role === 'Community' || currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && onResolveClientObservation && (
+                            <button
+                              type="button"
+                              onClick={() => setIsResolveModalOpen(true)}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
+                              title="Marcar que el cambio solicitado por el cliente ya fue realizado en el copy"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Marcar como Atendida</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <p className={`italic font-semibold bg-white/80 p-2.5 rounded-lg border mt-1 leading-relaxed ${themeStyles.quote}`}>
                         "{obs.comment}"
@@ -781,19 +841,6 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                             onChange={(e) => {
                               const newType = e.target.value as MaterialType;
                               setEditTipoMaterial(newType);
-                              if (newType === 'Video') {
-                                setEditAreaResponsable('Audio y Video');
-                                if (odt?.editorAvName) {
-                                  setEditResponsableActualName(odt.editorAvName);
-                                  setEditResponsableActualId(odt.editorAvId || '');
-                                }
-                              } else {
-                                setEditAreaResponsable('Arte');
-                                if (odt?.disenadorName) {
-                                  setEditResponsableActualName(odt.disenadorName);
-                                  setEditResponsableActualId(odt.disenadorId || '');
-                                }
-                              }
                             }}
                             className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-xs"
                           >
@@ -1891,6 +1938,20 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           availablePilares={availablePilares}
           onClose={() => setIsCalendarOpen(false)}
           title={`Planificador de Publicación — Post #${editNumeroInterno || post.numeroInterno}`}
+        />
+      )}
+
+      {/* Modal para Atender y Dejar Evidencia de Observación del Cliente */}
+      {isResolveModalOpen && (
+        <ResolveObservationModal
+          post={post}
+          currentUser={currentUser}
+          onClose={() => setIsResolveModalOpen(false)}
+          onConfirm={(targetPost, nota) => {
+            if (onResolveClientObservation) {
+              onResolveClientObservation(targetPost, nota);
+            }
+          }}
         />
       )}
 

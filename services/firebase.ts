@@ -1,16 +1,14 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { 
-  initializeFirestore, doc, getDocFromServer, getDocs, collection, 
+  getFirestore, doc, getDocFromServer, getDocs, collection, 
   setDoc, deleteDoc, onSnapshot, writeBatch 
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-// Initialize Firebase SDK with long-polling enabled to bypass iframe sandbox/proxy connection constraints
+// Initialize Firebase SDK with standard auto-transport (WebSocket primary with fallback)
 const app = initializeApp(firebaseConfig);
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-}, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 
 // Operational Enums & Types for audit error logging
@@ -60,9 +58,8 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Secure Audit Error: ', JSON.stringify(errInfo));
   
-  // Safe connection-tolerance fallback: Do not throw on temporary connection failure or network unreachable errors
+  // Safe connection-tolerance fallback: Do not throw or log fatal error on temporary connection failure or network unreachable errors
   const errorMsg = errInfo.error.toLowerCase();
   if (
     errorMsg.includes('could not reach') || 
@@ -75,6 +72,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     return;
   }
 
+  console.error('Firestore Secure Audit Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
 
@@ -86,12 +84,17 @@ export async function testConnection() {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration or network status.");
+      console.warn("Firestore running in offline/cached mode: backend connecting in background.");
     }
   }
 }
 
-testConnection();
+// Run connection validation asynchronously with a grace period to allow socket initialization
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    testConnection();
+  }, 2000);
+}
 
 /**
  * Recursively removes any keys with `undefined` values from an object or array,

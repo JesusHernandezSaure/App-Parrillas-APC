@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, Client, ODT, Post, PostStatus, PostComment, PostIntervention, UserRole, MaterialType, PriorityLevel, PostPublicationLink } from './types';
+import { User, Client, ODT, Post, PostStatus, PostComment, PostIntervention, UserRole, MaterialType, PriorityLevel, PostPublicationLink, PostObservationResolution } from './types';
 import { 
   loadInitialData, getStoredUsers, getStoredClients, saveStoredClients, 
   getStoredOdts, saveStoredOdts, getStoredPosts, saveStoredPosts,
@@ -60,17 +60,21 @@ export const App: React.FC = () => {
 
         const sanitizeOdtsWithCompletedChanges = (rawOdts: ODT[], rawPosts: Post[]): ODT[] => {
           return rawOdts.map(o => {
-            if (o.estadoAprobacionCopy === 'Cambios Solicitados') {
+            if (o.estadoAprobacionCopy === 'Cambios Solicitados' || o.estadoAprobacionMaterial === 'Cambios Solicitados') {
               const postsForOdt = rawPosts.filter(p => p.odtId === o.id);
               const pendingChanges = postsForOdt.filter(p => 
-                p.estado === 'Cambios solicitados por Cliente' || 
-                p.estado === 'Ajustes de Copy' ||
-                (p.aprobacionClienteCopy?.status === 'Cambios Solicitados' && !['Producción Arte', 'Producción Audio/Video', 'Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado))
+                !p.observacionClienteAtendida?.atendido && (
+                  p.estado === 'Cambios solicitados por Cliente' || 
+                  p.estado === 'Ajustes de Copy' ||
+                  (p.aprobacionClienteCopy?.status === 'Cambios Solicitados' && !['Producción Arte', 'Producción Audio/Video', 'Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado)) ||
+                  (p.aprobacionClienteMaterial?.status === 'Cambios Solicitados' && !['Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado))
+                )
               );
               if (postsForOdt.length > 0 && pendingChanges.length === 0) {
                 return {
                   ...o,
-                  estadoAprobacionCopy: 'Aprobada' as const
+                  estadoAprobacionCopy: 'Aprobada' as const,
+                  estadoAprobacionMaterial: 'Aprobada' as const
                 };
               }
             }
@@ -91,10 +95,15 @@ export const App: React.FC = () => {
           if (loadedPosts.length > 0 && isSubscribed) {
             const currentOdts = getStoredOdts();
             const cleanedPosts = loadedPosts.map(p => {
+              const commentLower = (p.aprobacionClienteCopy?.comment || '').toLowerCase();
+              const isAutoApproved = 
+                commentLower.includes('aprobado automáticamente') || 
+                commentLower.includes('aprobado en la ronda') ||
+                (p.aprobacionClienteCopy?.status === 'Aprobado' && !commentLower.includes('solicit'));
+
               if (
-                p.estado === 'Cambios solicitados por Cliente' && 
-                p.aprobacionClienteCopy?.status === 'Aprobado' &&
-                !p.aprobacionClienteCopy?.comment?.toLowerCase().includes('solicit')
+                (p.estado === 'Cambios solicitados por Cliente' || p.estado === 'Ajustes de Copy') && 
+                isAutoApproved
               ) {
                 const odt = currentOdts.find(o => o.id === p.odtId);
                 const isAV = isAudioVisual(p.tipoMaterial);
@@ -104,7 +113,7 @@ export const App: React.FC = () => {
                   ? 'Producción Audio/Video'
                   : 'Producción Arte';
                 const nextArea = isAV && !p.requiereArtePrevio ? 'Audio y Video' : 'Arte';
-                return {
+                const healedPost: Post = {
                   ...p,
                   estado: nextStatus,
                   areaResponsable: nextArea,
@@ -112,8 +121,17 @@ export const App: React.FC = () => {
                   responsableActualName: isAV ? odt?.editorAvName || 'Editor AV' : odt?.disenadorName || 'Diseñador',
                   solicitadoPorRole: undefined,
                   solicitadoPorName: undefined,
-                  solicitadoPorUserId: undefined
+                  solicitadoPorUserId: undefined,
+                  aprobacionClienteCopy: {
+                    status: 'Aprobado',
+                    user: p.aprobacionClienteCopy?.user || 'Cliente',
+                    date: p.aprobacionClienteCopy?.date || getNowTimestamp(),
+                    approvedAt: p.aprobacionClienteCopy?.approvedAt || getNowTimestamp(),
+                    comment: p.aprobacionClienteCopy?.comment || 'Aprobado por el cliente'
+                  }
                 };
+                dbSave('posts', p.id, healedPost);
+                return healedPost;
               }
               return p;
             });
@@ -160,17 +178,21 @@ export const App: React.FC = () => {
     const rawO = getStoredOdts();
     const rawP = getStoredPosts();
     return rawO.map(o => {
-      if (o.estadoAprobacionCopy === 'Cambios Solicitados') {
+      if (o.estadoAprobacionCopy === 'Cambios Solicitados' || o.estadoAprobacionMaterial === 'Cambios Solicitados') {
         const postsForOdt = rawP.filter(p => p.odtId === o.id);
         const pendingChanges = postsForOdt.filter(p => 
-          p.estado === 'Cambios solicitados por Cliente' || 
-          p.estado === 'Ajustes de Copy' ||
-          (p.aprobacionClienteCopy?.status === 'Cambios Solicitados' && !['Producción Arte', 'Producción Audio/Video', 'Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado))
+          !p.observacionClienteAtendida?.atendido && (
+            p.estado === 'Cambios solicitados por Cliente' || 
+            p.estado === 'Ajustes de Copy' ||
+            (p.aprobacionClienteCopy?.status === 'Cambios Solicitados' && !['Producción Arte', 'Producción Audio/Video', 'Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado)) ||
+            (p.aprobacionClienteMaterial?.status === 'Cambios Solicitados' && !['Listo para Publicar', 'Programado', 'Publicado'].includes(p.estado))
+          )
         );
         if (postsForOdt.length > 0 && pendingChanges.length === 0) {
           return {
             ...o,
-            estadoAprobacionCopy: 'Aprobada' as const
+            estadoAprobacionCopy: 'Aprobada' as const,
+            estadoAprobacionMaterial: 'Aprobada' as const
           };
         }
       }
@@ -181,10 +203,15 @@ export const App: React.FC = () => {
     const raw = getStoredPosts();
     const storedOdts = getStoredOdts();
     return raw.map(p => {
+      const commentLower = (p.aprobacionClienteCopy?.comment || '').toLowerCase();
+      const isAutoApproved = 
+        commentLower.includes('aprobado automáticamente') || 
+        commentLower.includes('aprobado en la ronda') ||
+        (p.aprobacionClienteCopy?.status === 'Aprobado' && !commentLower.includes('solicit'));
+
       if (
-        p.estado === 'Cambios solicitados por Cliente' && 
-        p.aprobacionClienteCopy?.status === 'Aprobado' &&
-        !p.aprobacionClienteCopy?.comment?.toLowerCase().includes('solicit')
+        (p.estado === 'Cambios solicitados por Cliente' || p.estado === 'Ajustes de Copy') && 
+        isAutoApproved
       ) {
         const odt = storedOdts.find(o => o.id === p.odtId);
         const isAV = isAudioVisual(p.tipoMaterial);
@@ -202,7 +229,14 @@ export const App: React.FC = () => {
           responsableActualName: isAV ? odt?.editorAvName || 'Editor AV' : odt?.disenadorName || 'Diseñador',
           solicitadoPorRole: undefined,
           solicitadoPorName: undefined,
-          solicitadoPorUserId: undefined
+          solicitadoPorUserId: undefined,
+          aprobacionClienteCopy: {
+            status: 'Aprobado',
+            user: p.aprobacionClienteCopy?.user || 'Cliente',
+            date: p.aprobacionClienteCopy?.date || getNowTimestamp(),
+            approvedAt: p.aprobacionClienteCopy?.approvedAt || getNowTimestamp(),
+            comment: p.aprobacionClienteCopy?.comment || 'Aprobado por el cliente'
+          }
         };
       }
       return p;
@@ -1245,9 +1279,13 @@ export const App: React.FC = () => {
   ) => {
     if (!activeModalPost) return;
 
+    const actionTitle = currentUser.role === 'Community'
+      ? 'Intervención de Flujo por Community Manager'
+      : 'Intervención Manual de Supervisor';
+
     const intervention = createIntervention(
       currentUser,
-      'Intervención Manual de Supervisor Ejecutivo',
+      actionTitle,
       motivo,
       activeModalPost.estado,
       newStatus
@@ -1268,6 +1306,91 @@ export const App: React.FC = () => {
 
     updatePostsState(updated);
     setIsInterventionOpen(false);
+  };
+
+  // 8b. Atender / Dejar Constancia de Observación del Cliente en Copy
+  const handleResolveClientObservation = (
+    post: Post,
+    nota: string,
+    revert: boolean = false
+  ) => {
+    const targetOdt = odts.find(o => o.id === post.odtId);
+    const isAV = isAudioVisual(post.tipoMaterial);
+
+    let nextStatus: PostStatus = post.estado;
+    let nextArea = post.areaResponsable;
+    let nextRespName = post.responsableActualName;
+    let nextRespId = post.responsableActualId;
+
+    if (!revert) {
+      // Si el post estaba detenido en cambios de cliente o ajustes de copy, avanzar a la fase técnica correspondiente
+      if (post.estado === 'Cambios solicitados por Cliente' || post.estado === 'Ajustes de Copy') {
+        nextStatus = (isAV && post.requiereArtePrevio)
+          ? 'Diseño de Editables (Arte)'
+          : isAV
+          ? 'Producción Audio/Video'
+          : 'Producción Arte';
+        nextArea = isAV && !post.requiereArtePrevio ? 'Audio y Video' : 'Arte';
+        nextRespName = isAV ? (targetOdt?.editorAvName || 'Editor AV') : (targetOdt?.disenadorName || 'Diseñador');
+        nextRespId = isAV ? (targetOdt?.editorAvId || '') : (targetOdt?.disenadorId || '');
+      }
+    }
+
+    const actionTitle = revert 
+      ? 'Observación de Cliente Reabierta' 
+      : 'Observación de Cliente Atendida';
+    const reasonText = revert 
+      ? `Observación reabierta por ${currentUser.name} para nueva revisión.`
+      : `${currentUser.name} (${currentUser.role}) confirmó y dejó constancia de la corrección del copy. Detalle: ${nota || 'Copy ajustado según la solicitud del cliente.'}`;
+
+    const intervention = createIntervention(
+      currentUser,
+      actionTitle,
+      reasonText,
+      post.estado,
+      nextStatus
+    );
+
+    const updatedResolution: PostObservationResolution | undefined = revert ? undefined : {
+      atendido: true,
+      atendidoPor: currentUser.name,
+      atendidoPorId: currentUser.id,
+      atendidoPorRole: currentUser.role,
+      fecha: getNowTimestamp(),
+      nota: nota.trim() || 'Ajuste de copy completado según lo solicitado.',
+      comentarioOriginal: post.aprobacionClienteCopy?.comment || post.aprobacionClienteMaterial?.comment || ''
+    };
+
+    const updated = posts.map(p => {
+      if (p.id !== post.id) return p;
+      return {
+        ...p,
+        estado: nextStatus,
+        areaResponsable: nextArea,
+        responsableActualName: nextRespName,
+        responsableActualId: nextRespId,
+        observacionClienteAtendida: updatedResolution,
+        historial: [intervention, ...p.historial],
+        updatedAt: getNowTimestamp()
+      };
+    });
+
+    updatePostsState(updated);
+
+    // Actualizar activeModalPost para reflejar de inmediato el cambio en el modal si está abierto
+    setActiveModalPost(current => {
+      if (!current || current.id !== post.id) return current;
+      return {
+        ...current,
+        estado: nextStatus,
+        areaResponsable: nextArea,
+        responsableActualName: nextRespName,
+        responsableActualId: nextRespId,
+        observacionClienteAtendida: updatedResolution,
+        historial: [intervention, ...current.historial],
+        updatedAt: getNowTimestamp()
+      };
+    });
   };
 
   // 9. Agregar Comentario en Ficha
@@ -1460,7 +1583,7 @@ export const App: React.FC = () => {
     // Actualizar publicaciones: reasignar solo los posts con cambios a Community, y avanzar los aprobados a Producción
     const hasGeneral = Boolean(generalComment && generalComment.trim());
 
-    const updatedPosts = posts.map(p => {
+    const updatedPosts: Post[] = posts.map(p => {
       if (p.odtId !== odtId) return p;
 
       const hasSpecificChange = changeMap.has(p.id);
@@ -1521,7 +1644,7 @@ export const App: React.FC = () => {
           areaResponsable: nextArea,
           responsableActualName: nextRespName,
           responsableActualId: nextRespId,
-          solicitadoPorRole: 'Cliente',
+          solicitadoPorRole: 'Cliente' as const,
           solicitadoPorName: currentUser.name,
           solicitadoPorUserId: currentUser.id,
           ...(tipo === 'COPY' 
@@ -2004,6 +2127,7 @@ export const App: React.FC = () => {
             onDeletePost={handleDeletePost}
             onUpdatePost={handleUpdatePostContent}
             onUpdateOdt={handleUpdateOdt}
+            onResolveClientObservation={handleResolveClientObservation}
           />
         )}
 
@@ -2043,6 +2167,7 @@ export const App: React.FC = () => {
               setIsInterventionOpen(true);
             }}
             onSendToClientApproval={handleSendToClientApproval}
+            onResolveClientObservation={handleResolveClientObservation}
             onOpenApprovalModal={(post, type) => {
               setActiveModalPost(post);
               setApprovalType(type || 'aprobacion_interna_final');
@@ -2158,6 +2283,7 @@ export const App: React.FC = () => {
               setActiveModalPost(p);
               setIsPublishOpen(true);
             }}
+            onResolveClientObservation={handleResolveClientObservation}
             onOpenIntervention={() => {
               setIsDetailOpen(false);
               setIsInterventionOpen(true);
