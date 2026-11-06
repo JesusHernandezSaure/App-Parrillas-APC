@@ -1938,6 +1938,8 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           availablePilares={availablePilares}
           onClose={() => setIsCalendarOpen(false)}
           title={`Planificador de Publicación — Post #${editNumeroInterno || post.numeroInterno}`}
+          odtId={post.odtId}
+          clientId={post.clientId}
         />
       )}
 

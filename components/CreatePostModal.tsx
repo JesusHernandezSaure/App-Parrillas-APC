@@ -652,6 +652,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           availablePilares={availablePilares}
           onClose={() => setIsCalendarOpen(false)}
           title={`Planificador de Publicación — ODT: ${odt.nombreParrilla}`}
+          odtId={odt.id}
+          clientId={odt.clientId}
         />
       )}
 
