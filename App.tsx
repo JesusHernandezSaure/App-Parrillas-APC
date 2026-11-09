@@ -2142,6 +2142,11 @@ export const App: React.FC = () => {
             selectedOdtId={selectedOdtId || undefined}
             onSelectClient={setSelectedClientId}
             onSelectOdt={setSelectedOdtId}
+            onOpenCreateOdt={(cid) => {
+              setEditingOdt(null);
+              setCreateOdtInitialClientId(cid);
+              setIsCreateOdtOpen(true);
+            }}
             onOpenCreatePost={(odt) => {
               setCreatePostOdt(odt);
               setIsCreatePostOpen(true);

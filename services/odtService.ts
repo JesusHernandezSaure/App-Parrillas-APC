@@ -48,8 +48,8 @@ export function getDefaultPermissions(role: UserRole): UserPermissions {
   }
   if (role === 'Community') {
     return {
-      canCreateOdt: false,
-      canEditOdt: false,
+      canCreateOdt: true,
+      canEditOdt: true,
       canDeleteOdt: false,
       canCreatePost: true,
       canEditAnyPost: true,

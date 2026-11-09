@@ -74,7 +74,9 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
   const arteUsers = users.filter(u => u.role === 'Arte' || u.role === 'Admin' || u.secondaryRoles?.includes('Arte'));
   const avUsers = users.filter(u => u.role === 'Audio y Video' || u.role === 'Admin' || u.secondaryRoles?.includes('Audio y Video'));
 
-  const [communityId, setCommunityId] = useState(odtToEdit?.communityId || communityUsers[0]?.id || '');
+  const [communityId, setCommunityId] = useState(
+    odtToEdit?.communityId || (currentUser.role === 'Community' ? currentUser.id : (communityUsers[0]?.id || ''))
+  );
   const [correctorId, setCorrectorId] = useState(odtToEdit?.correctorId || correctorUsers[0]?.id || '');
   const [medicoId, setMedicoId] = useState(odtToEdit?.medicoId || medicoUsers[0]?.id || '');
   const [disenadorId, setDisenadorId] = useState(odtToEdit?.disenadorId || arteUsers[0]?.id || '');
@@ -119,8 +121,8 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
       objetivo: objetivo.trim(),
       redesSociales,
       pilares: (pilares && pilares.length > 0) ? pilares : (selectedClient?.pilares || [...DEFAULT_PILARES]),
-      ejecutivoId: odtToEdit?.ejecutivoId || currentUser.id,
-      ejecutivoName: odtToEdit?.ejecutivoName || currentUser.name,
+      ejecutivoId: odtToEdit?.ejecutivoId || (currentUser.role === 'Ejecutivo' ? currentUser.id : (selectedClient?.ejecutivoId || users.find(u => u.role === 'Ejecutivo')?.id || currentUser.id)),
+      ejecutivoName: odtToEdit?.ejecutivoName || (currentUser.role === 'Ejecutivo' ? currentUser.name : (selectedClient?.ejecutivoName || users.find(u => u.role === 'Ejecutivo')?.name || currentUser.name)),
       fechaInicio,
       fechaObjetivo,
       requiereMedico,
@@ -204,18 +206,27 @@ export const CreateOdtModal: React.FC<CreateOdtModalProps> = ({
 
             <div>
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
-                Cliente *
+                Cliente / Marca *
               </label>
-              <select
-                required
-                className="w-full text-sm px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                value={clientId}
-                onChange={(e) => handleClientChange(e.target.value)}
-              >
-                {clients.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              {initialClientId && !isEditing ? (
+                <div className="w-full text-sm font-bold px-3 py-2 border border-emerald-300 bg-emerald-50 text-emerald-950 rounded-xl flex items-center justify-between shadow-2xs">
+                  <span>{clients.find(c => c.id === clientId)?.name || 'Cliente'}</span>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800">
+                    Carpeta Activa
+                  </span>
+                </div>
+              ) : (
+                <select
+                  required
+                  className="w-full text-sm px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                  value={clientId}
+                  onChange={(e) => handleClientChange(e.target.value)}
+                >
+                  {clients.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div>

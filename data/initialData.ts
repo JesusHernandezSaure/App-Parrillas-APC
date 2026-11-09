@@ -162,8 +162,8 @@ export const INITIAL_USERS: User[] = [
     password: '123',
     isActive: true,
     permissions: {
-      canCreateOdt: false,
-      canEditOdt: false,
+      canCreateOdt: true,
+      canEditOdt: true,
       canDeleteOdt: false,
       canCreatePost: true,
       canEditAnyPost: true,

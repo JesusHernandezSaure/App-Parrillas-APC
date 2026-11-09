@@ -212,8 +212,21 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
   const [selectedLevel3Stage, setSelectedLevel3Stage] = useState<Level3StageKey>('all');
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
-  const isOdtCreator = canCreateOdt !== false && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin');
-  const canEditOdt = Boolean(currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin' || currentUser.permissions?.canEditOdt);
+  const isOdtCreator = currentUser.role !== 'Cliente' && (
+    canCreateOdt === true || 
+    currentUser.role === 'Community' || 
+    currentUser.role === 'Ejecutivo' || 
+    currentUser.role === 'Admin' || 
+    currentUser.role === 'Super Admin' || 
+    Boolean(currentUser.permissions?.canCreateOdt)
+  );
+  const canEditOdt = currentUser.role !== 'Cliente' && (
+    currentUser.role === 'Ejecutivo' || 
+    currentUser.role === 'Admin' || 
+    currentUser.role === 'Super Admin' || 
+    currentUser.role === 'Community' || 
+    Boolean(currentUser.permissions?.canEditOdt)
+  );
 
   // Permisos para edición de nombre, copys y eliminación de posts
   const isClient = currentUser.role === 'Cliente';
@@ -791,19 +804,14 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
             </div>
           )}
 
-          {isOdtCreator ? (
+          {isOdtCreator && selectedClientId && activeClient && (
             <button
-              onClick={() => onOpenCreateOdt(selectedClientId || undefined)}
+              onClick={() => onOpenCreateOdt(selectedClientId)}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Nueva ODT / Parrilla</span>
+              <span>+ Nueva ODT en {activeClient.name}</span>
             </button>
-          ) : (
-            <div className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-2xs">
-              <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span>ODTs por Ejecutivo • <strong className="text-emerald-700">Creación de posts habilitada</strong></span>
-            </div>
           )}
         </div>
       </div>
@@ -1203,10 +1211,11 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
       {/* ========================================================================= */}
       {!activeOdt && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
               {selectedClientId ? (
                 <>
+                  <FolderOpen className="w-4 h-4 text-emerald-600" />
                   <span>Parrillas de {activeClient?.name}</span>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold normal-case">
                     ({displayedClientOdts.length} encontradas)
@@ -1214,6 +1223,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                 </>
               ) : (
                 <>
+                  <Folder className="w-4 h-4 text-slate-500" />
                   <span>Carpetas de Clientes</span>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold normal-case">
                     ({displayedClients.length} activos)
@@ -1222,11 +1232,33 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
               )}
             </h3>
             
-            {selectedOdtCardFilter !== 'all' && (
-              <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
-                Filtro activo: {selectedOdtCardFilter === 'carry_over' ? 'Mostrando únicamente arrastre' : selectedOdtCardFilter === 'published' ? 'Mostrando publicadas' : 'Mostrando creadas en período'}
-              </span>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              {selectedOdtCardFilter !== 'all' && (
+                <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                  Filtro activo: {selectedOdtCardFilter === 'carry_over' ? 'Mostrando únicamente arrastre' : selectedOdtCardFilter === 'published' ? 'Mostrando publicadas' : 'Mostrando creadas en período'}
+                </span>
+              )}
+
+              {/* Botón directo dentro de la carpeta del cliente */}
+              {selectedClientId && isOdtCreator && (
+                <button
+                  type="button"
+                  onClick={() => onOpenCreateOdt(selectedClientId)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-xs transition-all cursor-pointer hover:scale-102"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Crear Nueva ODT / Parrilla en {activeClient?.name}</span>
+                </button>
+              )}
+
+              {/* En la vista general exterior NO hay botón de creación: se debe entrar obligatoriamente a la carpeta de la marca */}
+              {!selectedClientId && (
+                <span className="text-xs text-slate-500 font-semibold bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 flex items-center gap-1.5">
+                  <Folder className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Entra a una carpeta para crear su parrilla</span>
+                </span>
+              )}
+            </div>
           </div>
 
           {!selectedClientId ? (
@@ -1278,23 +1310,37 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
           ) : (
             /* Lista de ODTs del Cliente Seleccionado (Nivel 2) */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {displayedClientOdts.length === 0 ? (
+              {/* Tarjeta de Acción Rápida para Crear Nueva ODT en este cliente (visible dentro de la carpeta) */}
+              {isOdtCreator && (
+                <div
+                  onClick={() => onOpenCreateOdt(selectedClientId)}
+                  className="rounded-2xl border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-emerald-50/50 hover:bg-emerald-100/70 p-5 flex flex-col items-center justify-center text-center gap-2.5 transition-all cursor-pointer group shadow-2xs min-h-[160px]"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+                    <Plus className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="font-black text-sm text-emerald-950 block">
+                      + Crear Nueva ODT / Parrilla
+                    </span>
+                    <span className="text-xs text-emerald-700 font-semibold block mt-0.5">
+                      Para {activeClient?.name}
+                    </span>
+                    <span className="text-[11px] text-emerald-600/90 block mt-1">
+                      Haz clic aquí para abrir el formulario y programar este cliente
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {displayedClientOdts.length === 0 && !isOdtCreator && (
                 <div className="col-span-2 p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-400">
                   <Layers className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                   <p className="text-sm font-semibold">No hay ODTs registradas para este cliente con el filtro actual.</p>
-                  {isOdtCreator ? (
-                    <button
-                      onClick={() => onOpenCreateOdt(selectedClientId)}
-                      className="mt-3 px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl cursor-pointer"
-                    >
-                      Crear primera ODT
-                    </button>
-                  ) : (
-                    <p className="text-xs text-slate-400 mt-1">El Ejecutivo de Cuentas debe inicializar la ODT/Parrilla para este cliente.</p>
-                  )}
                 </div>
-              ) : (
-                displayedClientOdts.map(odt => {
+              )}
+
+              {displayedClientOdts.map(odt => {
                   const odtPosts = posts.filter(p => p.odtId === odt.id);
                   const readyCount = odtPosts.filter(p => p.estado === 'Listo para Publicar' || p.estado === 'Publicado').length;
                   const progressPct = odtPosts.length > 0 ? Math.round((readyCount / odtPosts.length) * 100) : 0;
@@ -1409,8 +1455,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                       </div>
                     </div>
                   );
-                })
-              )}
+                })}
             </div>
           )}
         </div>
@@ -1435,7 +1480,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {canEditOdt && onOpenEditOdt && (
                   <button
                     type="button"
@@ -1445,6 +1490,17 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                   >
                     <Edit3 className="w-4 h-4" />
                     <span>Editar ODT / Parrilla</span>
+                  </button>
+                )}
+                {isOdtCreator && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenCreateOdt(activeOdt.clientId)}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                    title={`Crear otra ODT / Parrilla para ${activeOdt.clientName}`}
+                  >
+                    <Plus className="w-4 h-4 text-emerald-600" />
+                    <span>+ Nueva ODT en {activeOdt.clientName}</span>
                   </button>
                 )}
                 <button

@@ -20,6 +20,7 @@ interface CommunityViewProps {
   selectedOdtId?: string;
   onSelectClient?: (clientId: string | null) => void;
   onSelectOdt?: (odtId: string | null) => void;
+  onOpenCreateOdt?: (clientId?: string) => void;
   onOpenCreatePost: (odt: ODT) => void;
   onOpenEditOdt?: (odt: ODT) => void;
   onSelectPost: (post: Post, startEditing?: boolean) => void;
@@ -45,6 +46,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   selectedOdtId,
   onSelectClient,
   onSelectOdt,
+  onOpenCreateOdt,
   onOpenCreatePost,
   onOpenEditOdt,
   onSelectPost,
@@ -278,21 +280,23 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       {/* VISTA 1: GESTIÓN INTEGRAL DE PARRILLAS & POSTS (PERMISOS DE EJECUTIVO + CREACIÓN DE POSTS) */}
       {activeTab === 'parrillas' && (
         <div className="space-y-4">
-          <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-emerald-900 flex items-start gap-3 shadow-2xs">
-            <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700 shrink-0">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div className="text-xs space-y-1">
-              <p className="font-bold text-emerald-950 text-sm">
-                {scopeFilter === 'all' ? 'Visibilidad Global Habilitada' : 'Parrillas Asignadas Activas'} ({currentUser.name})
-              </p>
-              <p className="text-emerald-800 leading-relaxed">
-                {scopeFilter === 'all' ? (
-                  <>Acceso para consultar y operar en <strong>{communityClients.length} cliente(s)</strong> y <strong>{communityOdts.length} parrilla(s)</strong> de la agencia con <strong>{communityPosts.length} post(s)</strong>. Puedes crear posts en cualquier parrilla, redactar o ajustar copys, duplicar, reciclar y enviarlos a revisión.</>
-                ) : (
-                  <>Mostrando únicamente tus <strong>{communityOdts.length} parrilla(s) asignada(s)</strong> directamente con acceso a creación de posts, copys y envío a revisión.</>
-                )}
-              </p>
+          <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-emerald-900 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700 shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div className="text-xs space-y-1">
+                <p className="font-bold text-emerald-950 text-sm">
+                  {scopeFilter === 'all' ? 'Visibilidad Global Habilitada' : 'Parrillas Asignadas Activas'} ({currentUser.name})
+                </p>
+                <p className="text-emerald-800 leading-relaxed">
+                  {scopeFilter === 'all' ? (
+                    <>Acceso para consultar y operar en <strong>{communityClients.length} cliente(s)</strong> y <strong>{communityOdts.length} parrilla(s)</strong> de la agencia con <strong>{communityPosts.length} post(s)</strong>. Entra a la carpeta de cualquier marca para crear o gestionar sus parrillas y publicaciones.</>
+                  ) : (
+                    <>Mostrando únicamente tus <strong>{communityOdts.length} parrilla(s) asignada(s)</strong> directamente. Entra a la carpeta de la marca para crear o gestionar sus parrillas.</>
+                  )}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -301,12 +305,12 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             odts={communityOdts}
             posts={communityPosts}
             currentUser={currentUser}
-            canCreateOdt={false}
+            canCreateOdt={true}
             selectedClientId={activeClientId || undefined}
             selectedOdtId={activeOdtId || undefined}
             onSelectClient={handleSelectClient}
             onSelectOdt={handleSelectOdt}
-            onOpenCreateOdt={() => {}}
+            onOpenCreateOdt={onOpenCreateOdt || (() => {})}
             onOpenEditOdt={onOpenEditOdt}
             onOpenCreatePost={onOpenCreatePost}
             onSelectPost={onSelectPost}
