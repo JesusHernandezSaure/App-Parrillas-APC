@@ -921,10 +921,34 @@ export const App: React.FC = () => {
     } else if (type === 'correccion_copy') {
       patch.aprobacionCorreccionCopy = approvalRecord;
       if (isApproved) {
-        nextStatus = 'Esperando Ejecutivo';
-        nextArea = 'Ejecutivo';
-        nextRespName = odt.ejecutivoName;
-        nextRespId = odt.ejecutivoId;
+        // Si el post venía de cambios solicitados por el cliente (o ya tenía observación atendida por el Community),
+        // corrección de estilo ya lo certificó y revisó, por lo que pasa directamente a Producción (Arte o Audio/Video)
+        const isFromClientAdjustment = post.solicitadoPorRole === 'Cliente' || Boolean(post.observacionClienteAtendida?.atendido);
+        if (isFromClientAdjustment) {
+          const isAV = isAudioVisual(post.tipoMaterial);
+          if (isAV && post.requiereArtePrevio) {
+            nextStatus = 'Diseño de Editables (Arte)';
+            nextArea = 'Arte';
+            nextRespName = odt.disenadorName || 'Diseñador';
+            nextRespId = odt.disenadorId || '';
+          } else if (isAV) {
+            nextStatus = 'Producción Audio/Video';
+            nextArea = 'Audio y Video';
+            nextRespName = odt.editorAvName || 'Editor AV';
+            nextRespId = odt.editorAvId || '';
+          } else {
+            nextStatus = 'Producción Arte';
+            nextArea = 'Arte';
+            nextRespName = odt.disenadorName || 'Diseñador';
+            nextRespId = odt.disenadorId || '';
+          }
+        } else {
+          // Flujo inicial estándar previo al cliente: pasa a Esperando Ejecutivo para consolidar la parrilla
+          nextStatus = 'Esperando Ejecutivo';
+          nextArea = 'Ejecutivo';
+          nextRespName = odt.ejecutivoName;
+          nextRespId = odt.ejecutivoId;
+        }
         patch.solicitadoPorRole = undefined;
         patch.solicitadoPorName = undefined;
         patch.solicitadoPorUserId = undefined;
@@ -1041,8 +1065,8 @@ export const App: React.FC = () => {
         nextRespName = odt.communityName;
         nextRespId = odt.communityId;
       } else {
-        // Ejecutivo devuelve para correcciones antes de publicar
-        patch.solicitadoPorRole = 'Ejecutivo';
+        // Ejecutivo o Community devuelve para correcciones antes de publicar
+        patch.solicitadoPorRole = currentUser.role;
         patch.solicitadoPorName = currentUser.name;
         patch.solicitadoPorUserId = currentUser.id;
         if (isAudioVisual(post.tipoMaterial)) {
@@ -1312,10 +1336,10 @@ export const App: React.FC = () => {
   const handleResolveClientObservation = (
     post: Post,
     nota: string,
-    revert: boolean = false
+    revert: boolean = false,
+    updatedCopys?: { copyIn?: string; copyOut?: string }
   ) => {
     const targetOdt = odts.find(o => o.id === post.odtId);
-    const isAV = isAudioVisual(post.tipoMaterial);
 
     let nextStatus: PostStatus = post.estado;
     let nextArea = post.areaResponsable;
@@ -1323,25 +1347,23 @@ export const App: React.FC = () => {
     let nextRespId = post.responsableActualId;
 
     if (!revert) {
-      // Si el post estaba detenido en cambios de cliente o ajustes de copy, avanzar a la fase técnica correspondiente
+      // Nuevo flujo: cuando el Community atiende los cambios del cliente,
+      // el post pasa OBLIGATORIAMENTE a Corrección de Copy para que el corrector
+      // certifique la ortografía y redacción antes de que pase a producción.
       if (post.estado === 'Cambios solicitados por Cliente' || post.estado === 'Ajustes de Copy') {
-        nextStatus = (isAV && post.requiereArtePrevio)
-          ? 'Diseño de Editables (Arte)'
-          : isAV
-          ? 'Producción Audio/Video'
-          : 'Producción Arte';
-        nextArea = isAV && !post.requiereArtePrevio ? 'Audio y Video' : 'Arte';
-        nextRespName = isAV ? (targetOdt?.editorAvName || 'Editor AV') : (targetOdt?.disenadorName || 'Diseñador');
-        nextRespId = isAV ? (targetOdt?.editorAvId || '') : (targetOdt?.disenadorId || '');
+        nextStatus = 'Corrección de Copy';
+        nextArea = 'Corrección';
+        nextRespName = targetOdt?.correctorName || 'Corrector';
+        nextRespId = targetOdt?.correctorId || '';
       }
     }
 
     const actionTitle = revert 
       ? 'Observación de Cliente Reabierta' 
-      : 'Observación de Cliente Atendida';
+      : 'Observación de Cliente Atendida (Enviado a Corrección de Estilo)';
     const reasonText = revert 
       ? `Observación reabierta por ${currentUser.name} para nueva revisión.`
-      : `${currentUser.name} (${currentUser.role}) confirmó y dejó constancia de la corrección del copy. Detalle: ${nota || 'Copy ajustado según la solicitud del cliente.'}`;
+      : `${currentUser.name} (${currentUser.role}) corrigió los copys según lo pedido por el cliente y envió el post a Corrección de Estilo para validación antes de producción. Detalle: ${nota || 'Copy ajustado según la solicitud del cliente.'}`;
 
     const intervention = createIntervention(
       currentUser,
@@ -1361,10 +1383,16 @@ export const App: React.FC = () => {
       comentarioOriginal: post.aprobacionClienteCopy?.comment || post.aprobacionClienteMaterial?.comment || ''
     };
 
+    const newCopyIn = updatedCopys?.copyIn !== undefined ? updatedCopys.copyIn : post.copyIn;
+    const newCopyOut = updatedCopys?.copyOut !== undefined ? updatedCopys.copyOut : post.copyOut;
+
     const updated = posts.map(p => {
       if (p.id !== post.id) return p;
       return {
         ...p,
+        copyIn: newCopyIn,
+        copyOut: newCopyOut,
+        solicitadoPorRole: (revert ? undefined : 'Cliente') as 'Cliente' | undefined,
         estado: nextStatus,
         areaResponsable: nextArea,
         responsableActualName: nextRespName,
@@ -1382,6 +1410,9 @@ export const App: React.FC = () => {
       if (!current || current.id !== post.id) return current;
       return {
         ...current,
+        copyIn: newCopyIn,
+        copyOut: newCopyOut,
+        solicitadoPorRole: (revert ? undefined : 'Cliente') as 'Cliente' | undefined,
         estado: nextStatus,
         areaResponsable: nextArea,
         responsableActualName: nextRespName,

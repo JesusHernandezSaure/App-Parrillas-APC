@@ -192,27 +192,56 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div 
+        className={`bg-white rounded-3xl shadow-2xl transition-all duration-300 flex flex-col lg:flex-row overflow-hidden border border-slate-200 max-h-[95vh] my-auto ${
+          isCalendarOpen ? 'max-w-6xl w-full' : 'max-w-2xl w-full'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
         
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50/50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold">
-              <Sparkles className="w-4 h-4" />
+        {/* PANEL IZQUIERDO: Formulario de Creación */}
+        <div className={`flex flex-col flex-1 min-w-[320px] max-h-[95vh] overflow-hidden ${isCalendarOpen ? 'lg:max-w-xl lg:border-r border-slate-200' : 'w-full'}`}>
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50/70 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-xs">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Agregar Nuevo Post a la ODT</h2>
+                <p className="text-xs text-slate-500">{odt.numeroODT} • {odt.nombreParrilla}</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Agregar Nuevo Post a la ODT</h2>
-              <p className="text-xs text-slate-500">{odt.numeroODT} • {odt.nombreParrilla}</p>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+                className={`text-xs font-bold px-3 py-1.5 rounded-xl border flex items-center gap-1.5 transition-all cursor-pointer ${
+                  isCalendarOpen
+                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs'
+                }`}
+                title="Mostrar u ocultar el calendario con balance de pilares al lado de este formulario"
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{isCalendarOpen ? 'Ocultar Calendario' : 'Ver Calendario Lado a Lado'}</span>
+              </button>
+
+              <button
+                onClick={onClose}
+                type="button"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Cerrar modal de creación"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
         {/* Content */}
         <div className="p-6 overflow-y-auto space-y-4 flex-1">
@@ -638,23 +667,50 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           </div>
 
         </div>
+        {/* FIN PANEL IZQUIERDO */}
+      </div>
+
+        {/* PANEL DERECHO: Calendario Interactivo Lado a Lado (Visible en pantallas medianas y grandes) */}
+        {isCalendarOpen && (
+          <div className="hidden lg:flex flex-col flex-1 min-w-[500px] max-h-[95vh] bg-slate-50/50 overflow-hidden animate-in fade-in slide-in-from-right-4 duration-200">
+            <InteractiveCalendarPicker
+              isOpen={isCalendarOpen}
+              isEmbedded={true}
+              selectedDate={fechaPrevista}
+              onChange={(newDate) => handlePubDateChange(newDate)}
+              posts={posts.filter(p => p.odtId === odt.id)}
+              currentPilar={pilar}
+              availablePilares={availablePilares}
+              onClose={() => setIsCalendarOpen(false)}
+              title={`Pilares & Fechas — ${odt.nombreParrilla}`}
+              odtId={odt.id}
+              clientId={odt.clientId}
+            />
+          </div>
+        )}
 
       </div>
 
-      {/* Modal Interactivo de Calendario y Balance de Pilares */}
+      {/* En pantallas móviles (< lg), si se activa el calendario se muestra flotante sin cerrar el modal de creación */}
       {isCalendarOpen && (
-        <InteractiveCalendarPicker
-          isOpen={isCalendarOpen}
-          selectedDate={fechaPrevista}
-          onChange={(newDate) => handlePubDateChange(newDate)}
-          posts={posts.filter(p => p.odtId === odt.id)}
-          currentPilar={pilar}
-          availablePilares={availablePilares}
-          onClose={() => setIsCalendarOpen(false)}
-          title={`Planificador de Publicación — Parrilla: ${odt.nombreParrilla}`}
-          odtId={odt.id}
-          clientId={odt.clientId}
-        />
+        <div className="lg:hidden">
+          <InteractiveCalendarPicker
+            isOpen={isCalendarOpen}
+            isEmbedded={false}
+            selectedDate={fechaPrevista}
+            onChange={(newDate) => {
+              handlePubDateChange(newDate);
+              setIsCalendarOpen(false);
+            }}
+            posts={posts.filter(p => p.odtId === odt.id)}
+            currentPilar={pilar}
+            availablePilares={availablePilares}
+            onClose={() => setIsCalendarOpen(false)}
+            title={`Pilares & Fechas — ${odt.nombreParrilla}`}
+            odtId={odt.id}
+            clientId={odt.clientId}
+          />
+        </div>
       )}
 
     </div>

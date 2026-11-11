@@ -36,7 +36,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
       case 'correccion_copy': return 'Corrección de Estilo & Copy';
       case 'correccion_material': return 'Corrección Final de Material';
       case 'medico_material': return 'Revisión Médica de Material Final';
-      case 'aprobacion_interna_final': return 'Aprobación Interna Final (Ejecutivo)';
+      case 'aprobacion_interna_final': return 'Aprobación Interna Final (Ejecutivo / Community)';
       case 'esperando_ejecutivo': return 'Revisión de Ejecutivo previa a Cliente';
       case 'cliente_copy': return 'Aprobación de Copy (Cliente)';
       case 'cliente_material': return 'Aprobación de Material';
@@ -47,12 +47,15 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
     if (action === 'approve') {
       switch (type) {
         case 'medico': return 'El Post pasará a Corrección de Copy para revisión de estilo.';
-        case 'correccion_copy': return 'El Post pasará al Ejecutivo de Cuentas para consolidar la Parrilla de Copy lista para el Cliente.';
+        case 'correccion_copy': 
+          return (post.solicitadoPorRole === 'Cliente' || Boolean(post.observacionClienteAtendida?.atendido))
+            ? 'Corrección de estilo aprobada tras ajustes de cliente. El Post pasará inmediatamente a Producción (Arte o Audio/Video) certificado y listo para diseño.'
+            : 'El Post pasará al Ejecutivo de Cuentas para consolidar la Parrilla de Copy lista para el Cliente.';
         case 'correccion_material': 
           return requiereRevisionMedica 
             ? 'Corrección final aprobada. Pasará a Revisión Médica del material por incorporar claims o datos científicos.'
-            : 'Corrección final aprobada. Pasará a Aprobación Interna Final con el Ejecutivo dueño de la ODT.';
-        case 'medico_material': return 'Visto bueno médico otorgado. El Post pasará a Aprobación Interna Final con el Ejecutivo.';
+            : 'Corrección final aprobada. Pasará a Aprobación Interna Final (Ejecutivo o Community).';
+        case 'medico_material': return 'Visto bueno médico otorgado. El Post pasará a Aprobación Interna Final (Ejecutivo o Community).';
         case 'aprobacion_interna_final': return '¡Aprobado para publicación! Pasará inmediatamente a la bandeja "Listo para Publicar" del Community Manager.';
         case 'esperando_ejecutivo': return 'El Post pasará a la parrilla lista para revisión y visto bueno del Cliente.';
         case 'cliente_copy': return post.tipoMaterial === 'Video'

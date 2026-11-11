@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Post, DEFAULT_PILARES } from '../types';
 import { 
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, X, Clock, 
@@ -118,6 +118,7 @@ interface InteractiveCalendarPickerProps {
   title?: string;
   odtId?: string;
   clientId?: string;
+  isEmbedded?: boolean;
 }
 
 export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps> = ({
@@ -131,8 +132,22 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
   onClose,
   title = 'Planificador de Fecha y Balance de Pilares',
   odtId,
-  clientId
+  clientId,
+  isEmbedded = false
 }) => {
+  // Manejador aislado de tecla Escape para no cerrar modales padres
+  useEffect(() => {
+    if (!isOpen || isEmbedded) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen, isEmbedded, onClose]);
+
   // Inicializar el mes y año visualizados con base en selectedDate o la fecha actual
   const initialDateObj = useMemo(() => {
     if (selectedDate && selectedDate.includes('-')) {
@@ -257,9 +272,11 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
 
   const currentPilarColor = currentPilar ? getPilarColor(currentPilar) : null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col my-auto max-h-[95vh]">
+  const calendarContent = (
+    <div 
+      className={`bg-white overflow-hidden flex flex-col ${isEmbedded ? 'h-full w-full' : 'rounded-3xl shadow-2xl max-w-4xl w-full border border-slate-200 my-auto max-h-[95vh]'}`}
+      onClick={(e) => e.stopPropagation()}
+    >
         
         {/* Cabecera del Calendario */}
         <div className="p-4 sm:p-5 border-b border-slate-200 bg-gradient-to-r from-indigo-50/90 via-slate-50 to-blue-50/90 flex items-center justify-between shrink-0">
@@ -729,11 +746,25 @@ export const InteractiveCalendarPicker: React.FC<InteractiveCalendarPickerProps>
             onClick={onClose}
             className="px-5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer shrink-0 ml-auto"
           >
-            Cerrar Calendario
           </button>
         </div>
 
-      </div>
+    </div>
+  );
+
+  if (isEmbedded) {
+    return calendarContent;
+  }
+
+  return (
+    <div 
+      className="fixed inset-0 z-70 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      {calendarContent}
     </div>
   );
 };

@@ -228,7 +228,7 @@ export interface Post {
   aprobacionInternaFinal?: ApprovalRecord;
   aprobacionClienteMaterial?: ApprovalRecord;
   requiereRevisionMedica?: boolean; // Permite especificar o ajustar si este post individual requiere validación médica
-  solicitadoPorRole?: 'Corrector' | 'Médico' | 'Cliente' | 'Ejecutivo'; // Rastrear quién solicitó los ajustes para retorno inteligente
+  solicitadoPorRole?: 'Corrector' | 'Médico' | 'Cliente' | 'Ejecutivo' | 'Community' | UserRole; // Rastrear quién solicitó los ajustes para retorno inteligente
   solicitadoPorName?: string;
   solicitadoPorUserId?: string;
   requiereRevisionMedicaMaterial?: boolean;

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Post, ODT, Client, User } from '../types';
-import { CheckSquare, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Clock, Layers, Sparkles, Filter, UserCheck, Eye, Edit3, Copy, Check } from 'lucide-react';
+import { CheckSquare, CheckCircle2, AlertTriangle, ExternalLink, ShieldCheck, Clock, Layers, Sparkles, Filter, UserCheck, Eye, Edit3, Copy, Check, ChevronDown, ChevronUp, Film, Image } from 'lucide-react';
 import { RichTextDisplay } from './RichTextDisplay';
 
 interface CorrectorViewProps {
@@ -23,6 +23,11 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
   const [subQueue, setSubQueue] = useState<'copy' | 'material' | 'history'>('copy');
   const [selectedOdtFilter, setSelectedOdtFilter] = useState<string>('all');
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
+  const [expandedPostIds, setExpandedPostIds] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (id: string) => {
+    setExpandedPostIds(prev => ({ ...prev, [id]: !prev[id] }));
+  };
   
   // Soporte para supervisores/administradores (permitir alternar entre asignadas y todas)
   const isSupervisorOrAdmin = currentUser.role === 'Super Admin' || currentUser.role === 'Admin' || Boolean(currentUser.permissions?.canSuperviseAll);
@@ -253,8 +258,35 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
                       <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold">
                         {post.redSocial}
                       </span>
+                      {/* Badge Destacado de Formato */}
+                      {post.tipoMaterial === 'Video' ? (
+                        <span className="text-xs px-2.5 py-0.5 rounded-md bg-purple-100 text-purple-900 font-extrabold border border-purple-200 flex items-center gap-1">
+                          <Film className="w-3.5 h-3.5 text-purple-700" />
+                          <span>Video</span>
+                        </span>
+                      ) : post.tipoMaterial === 'Carrusel' ? (
+                        <span className="text-xs px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 font-extrabold border border-amber-200 flex items-center gap-1">
+                          <Layers className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Carrusel</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2.5 py-0.5 rounded-md bg-sky-100 text-sky-900 font-extrabold border border-sky-200 flex items-center gap-1">
+                          <Image className="w-3.5 h-3.5 text-sky-700" />
+                          <span>Imagen</span>
+                        </span>
+                      )}
+                      {post.dimensiones && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                          {post.dimensiones}
+                        </span>
+                      )}
+                      {post.pilar && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
+                          {post.pilar}
+                        </span>
+                      )}
                       <span className="text-xs text-slate-500">
-                        ODT: {odt?.numeroODT} • Formato: {post.tipoMaterial}
+                        ODT: {odt?.numeroODT}
                       </span>
                     </div>
 
@@ -355,9 +387,36 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
                       <span className="text-xs px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-800 font-bold border border-indigo-200">
                         {client?.name || 'Cliente'}
                       </span>
-                      <span className="text-xs px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 font-semibold">
-                        Formato: {post.tipoMaterial}
+                      <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold">
+                        {post.redSocial}
                       </span>
+                      {/* Badge Destacado de Formato */}
+                      {post.tipoMaterial === 'Video' ? (
+                        <span className="text-xs px-2.5 py-0.5 rounded-md bg-purple-100 text-purple-900 font-extrabold border border-purple-200 flex items-center gap-1">
+                          <Film className="w-3.5 h-3.5 text-purple-700" />
+                          <span>Video</span>
+                        </span>
+                      ) : post.tipoMaterial === 'Carrusel' ? (
+                        <span className="text-xs px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 font-extrabold border border-amber-200 flex items-center gap-1">
+                          <Layers className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Carrusel</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2.5 py-0.5 rounded-md bg-sky-100 text-sky-900 font-extrabold border border-sky-200 flex items-center gap-1">
+                          <Image className="w-3.5 h-3.5 text-sky-700" />
+                          <span>Imagen</span>
+                        </span>
+                      )}
+                      {post.dimensiones && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                          {post.dimensiones}
+                        </span>
+                      )}
+                      {post.pilar && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
+                          {post.pilar}
+                        </span>
+                      )}
                       <span className="text-xs text-slate-500">
                         Entregado por: {post.responsableActualName || 'Producción'}
                       </span>
@@ -474,23 +533,177 @@ export const CorrectorView: React.FC<CorrectorViewProps> = ({
         </div>
       )}
 
-      {/* COLA 3: HISTORIAL */}
+      {/* COLA 3: HISTORIAL DE INTERVENCIONES CON COPYS DESPLEGABLES */}
       {subQueue === 'history' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {historicalPosts.map(p => (
-            <div key={p.id} className="bg-white rounded-2xl p-4 border border-slate-200 text-xs space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-slate-900">{p.numeroInterno} • {p.redSocial}</span>
-                <span className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 font-bold">
-                  {p.estado}
-                </span>
-              </div>
-              <p className="text-slate-600 line-clamp-2">{p.copyOut}</p>
-              {p.aprobacionCorreccionCopy?.comment && (
-                <p className="italic text-slate-500">Nota: "{p.aprobacionCorreccionCopy.comment}"</p>
-              )}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+              Historial de Publicaciones Dictaminadas ({historicalPosts.length})
+            </h3>
+            <span className="text-xs text-slate-500">
+              Despliega cualquier post para corroborar el texto íntegro aprobado de Copy In y Copy Out.
+            </span>
+          </div>
+
+          {historicalPosts.length === 0 ? (
+            <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 text-slate-400">
+              <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+              <p className="text-sm font-semibold text-slate-700">No hay historial de revisiones registradas aún.</p>
             </div>
-          ))}
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {historicalPosts.map(p => {
+                const client = clients.find(c => c.id === p.clientId);
+                const odt = odts.find(o => o.id === p.odtId);
+                const isExpanded = Boolean(expandedPostIds[p.id]);
+                const approval = p.aprobacionCorreccionCopy || p.aprobacionCorreccionMaterial;
+
+                return (
+                  <div key={p.id} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-3.5 transition-all">
+                    {/* Header de la tarjeta */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2.5 py-1 rounded-md bg-slate-900 text-white font-mono text-xs font-bold">
+                          {p.numeroInterno}
+                        </span>
+                        <span className="text-xs px-2.5 py-0.5 rounded-md bg-purple-50 text-purple-800 font-bold border border-purple-200">
+                          {client?.name || 'Cliente'}
+                        </span>
+                        <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold">
+                          {p.redSocial}
+                        </span>
+
+                        {/* Badges de Formato y Medidas */}
+                        {p.tipoMaterial === 'Video' ? (
+                          <span className="text-xs px-2.5 py-0.5 rounded-md bg-purple-100 text-purple-900 font-extrabold border border-purple-200 flex items-center gap-1">
+                            <Film className="w-3.5 h-3.5 text-purple-700" />
+                            <span>Video</span>
+                          </span>
+                        ) : p.tipoMaterial === 'Carrusel' ? (
+                          <span className="text-xs px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 font-extrabold border border-amber-200 flex items-center gap-1">
+                            <Layers className="w-3.5 h-3.5 text-amber-700" />
+                            <span>Carrusel</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs px-2.5 py-0.5 rounded-md bg-sky-100 text-sky-900 font-extrabold border border-sky-200 flex items-center gap-1">
+                            <Image className="w-3.5 h-3.5 text-sky-700" />
+                            <span>Imagen</span>
+                          </span>
+                        )}
+
+                        {p.dimensiones && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                            {p.dimensiones}
+                          </span>
+                        )}
+
+                        {p.pilar && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
+                            {p.pilar}
+                          </span>
+                        )}
+
+                        <span className="text-xs text-slate-500">
+                          ODT: {odt?.numeroODT}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                          p.estado === 'Publicado' ? 'bg-teal-50 text-teal-800 border-teal-200' :
+                          p.estado === 'Listo para Publicar' || p.estado === 'Programado' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                          p.estado.includes('Producción') ? 'bg-pink-50 text-pink-800 border-pink-200' :
+                          'bg-purple-50 text-purple-800 border-purple-200'
+                        }`}>
+                          Estado: {p.estado}
+                        </span>
+                        <button
+                          onClick={() => onSelectPost(p)}
+                          className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                        >
+                          Ver Ficha
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Resumen de dictamen previo */}
+                    <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700">
+                      <div>
+                        <span>Dictaminado por: <strong>{approval?.user || 'Corrector'}</strong></span>
+                        {approval?.date && <span className="text-slate-400 ml-2">({approval.date})</span>}
+                        {approval?.comment && (
+                          <p className="italic text-slate-600 mt-1">"{approval.comment}"</p>
+                        )}
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                        approval?.status === 'Aprobado' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {approval?.status || 'Aprobado'}
+                      </span>
+                    </div>
+
+                    {/* Botón Acordeón Desplegable */}
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(p.id)}
+                      className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
+                        isExpanded
+                          ? 'bg-purple-100/80 text-purple-900 border border-purple-300 shadow-2xs'
+                          : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <CheckSquare className="w-4 h-4 text-purple-700" />
+                        <span>{isExpanded ? 'Ocultar Copys Aprobados' : 'Desplegar y Ver Texto Completo de Copys Aprobados'}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] font-semibold text-purple-700">
+                        <span>{isExpanded ? 'Cerrar' : 'Ver todo'}</span>
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </div>
+                    </button>
+
+                    {/* Contenido desplegado: Textos completos con RichTextDisplay y botón de copiar */}
+                    {isExpanded && (
+                      <div className="pt-2 space-y-3 animate-in fade-in duration-200">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                          {/* Copy In */}
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1.5">
+                            <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+                              <span className="font-extrabold text-slate-600 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                                <span>Copy In Aprobado (Texto en Gráfica / Arte)</span>
+                              </span>
+                            </div>
+                            <RichTextDisplay content={p.copyIn} fallbackText="(Sin texto en gráfica)" showCopyButton copyButtonLabel="Copiar" />
+                          </div>
+
+                          {/* Copy Out */}
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-1.5">
+                            <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+                              <span className="font-extrabold text-slate-600 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                                <span>Copy Out Aprobado (Pie de post / Caption)</span>
+                              </span>
+                            </div>
+                            <RichTextDisplay content={p.copyOut} fallbackText="(Sin texto de caption)" showCopyButton copyButtonLabel="Copiar" />
+                          </div>
+                        </div>
+
+                        {/* Evidencia de observación de cliente si aplica */}
+                        {p.observacionClienteAtendida?.atendido && (
+                          <div className="p-3 bg-emerald-50/80 rounded-xl border border-emerald-200 text-xs text-emerald-950 flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                            <div className="text-[11px] leading-relaxed">
+                              <strong>Ajuste de cliente atendido por {p.observacionClienteAtendida.atendidoPor} ({p.observacionClienteAtendida.fecha}):</strong>
+                              <p className="italic text-emerald-900 mt-0.5">"{p.observacionClienteAtendida.nota}"</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

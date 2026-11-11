@@ -46,7 +46,7 @@ interface PostDetailModalProps {
   onDuplicatePost?: (post: Post, newRedSocial: string) => void;
   onRecyclePost?: (post: Post) => void;
   onOpenPublishModal?: (post: Post) => void;
-  onResolveClientObservation?: (post: Post, nota: string, revert?: boolean) => void;
+  onResolveClientObservation?: (post: Post, nota: string, revert?: boolean, updatedCopys?: { copyIn?: string; copyOut?: string }) => void;
   initialEditMode?: boolean;
 }
 
@@ -218,9 +218,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           copyOut: editCopyOut.trim()
         });
       } else {
-        const autoArea = editTipoMaterial === 'Video' ? 'Audio y Video' : 'Arte';
-        const autoRespName = editTipoMaterial === 'Video' ? (odt?.editorAvName || '') : (odt?.disenadorName || '');
-        const autoRespId = editTipoMaterial === 'Video' ? (odt?.editorAvId || '') : (odt?.disenadorId || '');
+        const isCopyPhase = ['Borrador', 'En Community', 'Ajustes de Copy', 'Cambios solicitados por Cliente', 'Revisión Médica', 'Corrección de Copy', 'Esperando Ejecutivo'].includes(post.estado);
+        const autoArea = isCopyPhase ? post.areaResponsable : (editTipoMaterial === 'Video' ? 'Audio y Video' : 'Arte');
+        const autoRespName = isCopyPhase ? post.responsableActualName : (editTipoMaterial === 'Video' ? (odt?.editorAvName || '') : (odt?.disenadorName || ''));
+        const autoRespId = isCopyPhase ? post.responsableActualId : (editTipoMaterial === 'Video' ? (odt?.editorAvId || '') : (odt?.disenadorId || ''));
         const finalReqMed = alreadyHadMedicalReview ? true : editRequiereRevisionMedica;
 
         onUpdatePost(post.id, {
@@ -1949,9 +1950,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           post={post}
           currentUser={currentUser}
           onClose={() => setIsResolveModalOpen(false)}
-          onConfirm={(targetPost, nota) => {
+          onConfirm={(targetPost, nota, updatedCopys) => {
             if (onResolveClientObservation) {
-              onResolveClientObservation(targetPost, nota);
+              onResolveClientObservation(targetPost, nota, false, updatedCopys);
             }
           }}
         />

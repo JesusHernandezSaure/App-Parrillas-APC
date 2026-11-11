@@ -34,7 +34,7 @@ interface CommunityViewProps {
   onDuplicatePost?: (post: Post, newRedSocial: string) => void;
   onRecyclePost?: (post: Post) => void;
   onDeletePost?: (postId: string) => void;
-  onResolveClientObservation?: (post: Post, nota: string, revert?: boolean) => void;
+  onResolveClientObservation?: (post: Post, nota: string, revert?: boolean, updatedCopys?: { copyIn?: string; copyOut?: string }) => void;
 }
 
 export const CommunityView: React.FC<CommunityViewProps> = ({
@@ -1042,9 +1042,9 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
           post={resolvingPost}
           currentUser={currentUser}
           onClose={() => setResolvingPost(null)}
-          onConfirm={(post, nota) => {
+          onConfirm={(post, nota, updatedCopys) => {
             if (onResolveClientObservation) {
-              onResolveClientObservation(post, nota);
+              onResolveClientObservation(post, nota, false, updatedCopys);
             }
           }}
         />

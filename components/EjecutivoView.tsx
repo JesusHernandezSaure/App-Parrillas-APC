@@ -164,7 +164,7 @@ interface EjecutivoViewProps {
   onDeletePost?: (postId: string) => void;
   onUpdatePost?: (postId: string, data: Partial<Post>) => void;
   onUpdateOdt?: (odtId: string, data: Partial<ODT>) => void;
-  onResolveClientObservation?: (post: Post, nota: string, revert?: boolean) => void;
+  onResolveClientObservation?: (post: Post, nota: string, revert?: boolean, updatedCopys?: { copyIn?: string; copyOut?: string }) => void;
   canCreateOdt?: boolean;
   selectedClientId?: string;
   selectedOdtId?: string;
@@ -2008,8 +2008,8 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                             </button>
                           )}
 
-                          {/* Acción: Aprobación Interna Final (Exclusivo Ejecutivo / Admin / Super Admin) */}
-                          {isInternalFinal && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') && (
+                          {/* Acción: Aprobación Interna Final (Ejecutivo / Community / Admin / Super Admin) */}
+                          {isInternalFinal && (currentUser.role === 'Ejecutivo' || currentUser.role === 'Community' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin' || Boolean(currentUser.permissions?.canApproveAnyStage)) && (
                             <button
                               onClick={() => onOpenApprovalModal?.(post, 'aprobacion_interna_final')}
                               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
@@ -2250,9 +2250,9 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
           post={resolvingPost}
           currentUser={currentUser}
           onClose={() => setResolvingPost(null)}
-          onConfirm={(post, nota) => {
+          onConfirm={(post, nota, updatedCopys) => {
             if (onResolveClientObservation) {
-              onResolveClientObservation(post, nota);
+              onResolveClientObservation(post, nota, false, updatedCopys);
             }
           }}
         />
