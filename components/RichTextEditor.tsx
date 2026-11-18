@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useImperativeHandle } from 'react';
 import {
   Bold,
   Italic,
@@ -16,6 +16,12 @@ import {
 } from 'lucide-react';
 import { stripHtml, convertToUnicodeSocial, normalizeValueForEditor, isHtmlContent } from './RichTextDisplay';
 
+export interface RichTextEditorHandle {
+  getHtml: () => string;
+  flush: () => string;
+  focus: () => void;
+}
+
 interface RichTextEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -29,15 +35,16 @@ const COMMON_EMOJIS = [
   '✨', '💡', '👉', '📌', '🎯', '📅', '🔥', '❤️', '✅', '⚠️', '💬', '🩺', '💊', '🏥', '👥', '📲', '⭐'
 ];
 
-export const RichTextEditor: React.FC<RichTextEditorProps> = ({
+export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
   value,
   onChange,
   placeholder = 'Escribe aquí...',
   minHeight = '110px',
   className = '',
   disabled = false
-}) => {
+}, ref) => {
   const editorRef = useRef<HTMLDivElement>(null);
+  const lastEmittedRef = useRef<string>(value || '');
   const [activeFormats, setActiveFormats] = useState<{
     bold: boolean;
     italic: boolean;
@@ -57,10 +64,21 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const [showEmojis, setShowEmojis] = useState(false);
   const [copiedType, setCopiedType] = useState<'clean' | 'unicode' | null>(null);
 
+  const extractCleanHtml = useCallback((): string => {
+    if (!editorRef.current) return lastEmittedRef.current;
+    const html = editorRef.current.innerHTML;
+    const cleanText = editorRef.current.textContent?.trim();
+    if (!cleanText && (!html || html === '<p><br></p>' || html === '<br>')) {
+      return '';
+    }
+    return html;
+  }, []);
+
   // Sync internal innerHTML when value prop changes externally (e.g. initial load or reset)
   // Preserves multi-line formatting from legacy plain text or rich HTML
   useEffect(() => {
     if (!editorRef.current) return;
+    lastEmittedRef.current = value || '';
     const targetHtml = normalizeValueForEditor(value);
     
     // Don't overwrite if user is actively typing in the editor
@@ -88,18 +106,28 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     }
   }, []);
 
-  const handleInput = () => {
+  const handleInput = useCallback(() => {
     if (!editorRef.current) return;
-    const html = editorRef.current.innerHTML;
-    // Check if truly empty (e.g. <br>, <p><br></p>)
-    const cleanText = editorRef.current.textContent?.trim();
-    if (!cleanText && (!html || html === '<p><br></p>' || html === '<br>')) {
-      onChange('');
-    } else {
-      onChange(html);
+    const nextHtml = extractCleanHtml();
+    if (nextHtml !== lastEmittedRef.current) {
+      lastEmittedRef.current = nextHtml;
+      onChange(nextHtml);
     }
     updateActiveFormats();
-  };
+  }, [extractCleanHtml, onChange, updateActiveFormats]);
+
+  useImperativeHandle(ref, () => ({
+    getHtml: () => extractCleanHtml(),
+    flush: () => {
+      const currentHtml = extractCleanHtml();
+      if (currentHtml !== lastEmittedRef.current) {
+        lastEmittedRef.current = currentHtml;
+        onChange(currentHtml);
+      }
+      return currentHtml;
+    },
+    focus: () => editorRef.current?.focus()
+  }), [extractCleanHtml, onChange]);
 
   const executeCommand = (command: string, arg: string | undefined = undefined) => {
     if (disabled || !editorRef.current) return;
@@ -388,6 +416,8 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           ref={editorRef}
           contentEditable={!disabled}
           onInput={handleInput}
+          onBlur={handleInput}
+          onCompositionEnd={handleInput}
           onKeyUp={updateActiveFormats}
           onMouseUp={updateActiveFormats}
           onPaste={handlePaste}
@@ -441,4 +471,6 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       </div>
     </div>
   );
-};
+});
+
+RichTextEditor.displayName = 'RichTextEditor';

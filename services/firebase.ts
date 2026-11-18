@@ -41,7 +41,12 @@ export interface FirestoreErrorInfo {
 /**
  * Standard secure error handler as per system rules.
  */
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null,
+  throwOnNetworkError: boolean = false
+) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -59,14 +64,16 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     path
   };
   
-  // Safe connection-tolerance fallback: Do not throw or log fatal error on temporary connection failure or network unreachable errors
+  // Safe connection-tolerance fallback unless caller explicitly requires confirmation of write
   const errorMsg = errInfo.error.toLowerCase();
   if (
-    errorMsg.includes('could not reach') || 
-    errorMsg.includes('unavailable') || 
-    errorMsg.includes('offline') || 
-    errorMsg.includes('connection failed') ||
-    errorMsg.includes('network')
+    !throwOnNetworkError && (
+      errorMsg.includes('could not reach') || 
+      errorMsg.includes('unavailable') || 
+      errorMsg.includes('offline') || 
+      errorMsg.includes('connection failed') ||
+      errorMsg.includes('network')
+    )
   ) {
     console.warn("Firestore is operating in offline-caching mode. Changes will automatically sync when backend becomes reachable.");
     return;
@@ -127,14 +134,19 @@ export function cleanUndefined(obj: any): any {
 /**
  * Save a document in Firestore with automatic error wrapping and undefined-value stripping.
  */
-export async function dbSave(collectionName: string, docId: string, data: any): Promise<void> {
+export async function dbSave(
+  collectionName: string,
+  docId: string,
+  data: any,
+  options?: { throwOnError?: boolean }
+): Promise<void> {
   const path = `${collectionName}/${docId}`;
   try {
     const docRef = doc(db, collectionName, docId);
     const cleanedData = cleanUndefined(data);
     await setDoc(docRef, cleanedData);
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    handleFirestoreError(error, OperationType.WRITE, path, Boolean(options?.throwOnError));
   }
 }
 
@@ -172,10 +184,18 @@ export async function dbSeedIfEmpty(collectionName: string, initialItems: any[])
   }
 }
 
+export interface DbSnapshotMeta {
+  hasPendingWrites: boolean;
+  fromCache: boolean;
+}
+
 /**
  * Real-time active listener on a collection.
  */
-export function dbListen(collectionName: string, onUpdate: (items: any[]) => void): () => void {
+export function dbListen(
+  collectionName: string,
+  onUpdate: (items: any[], meta?: DbSnapshotMeta) => void
+): () => void {
   const colRef = collection(db, collectionName);
   return onSnapshot(
     colRef,
@@ -184,7 +204,10 @@ export function dbListen(collectionName: string, onUpdate: (items: any[]) => voi
       snapshot.forEach(doc => {
         items.push({ id: doc.id, ...doc.data() });
       });
-      onUpdate(items);
+      onUpdate(items, {
+        hasPendingWrites: snapshot.metadata.hasPendingWrites,
+        fromCache: snapshot.metadata.fromCache
+      });
     },
     (error) => {
       handleFirestoreError(error, OperationType.LIST, collectionName);

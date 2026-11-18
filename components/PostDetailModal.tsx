@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Post, ODT, User, PostComment, MaterialType, PostDimensions, PriorityLevel, DEFAULT_PILARES } from '../types';
 import { 
   X, CheckCircle2, Clock, AlertTriangle, ExternalLink, ShieldCheck, ShieldAlert,
   MessageSquare, Send, History, ArrowRight, UserCircle2, Eye, EyeOff,
   Edit3, Save, Check, Copy, RefreshCw, Calendar, Sparkles, Globe, Share2, Trash2,
-  Stethoscope, Palette, Video, Layers, Plus
+  Stethoscope, Palette, Video, Layers, Plus, Loader2
 } from 'lucide-react';
 import { getNowTimestamp } from '../services/odtService';
 import { PostStageMap } from './PostPipelineTracker';
-import { RichTextEditor } from './RichTextEditor';
+import { RichTextEditor, RichTextEditorHandle } from './RichTextEditor';
 import { RichTextDisplay } from './RichTextDisplay';
 import { InteractiveCalendarPicker, getPilarColor } from './InteractiveCalendarPicker';
 import { ResolveObservationModal } from './ResolveObservationModal';
@@ -40,9 +40,9 @@ interface PostDetailModalProps {
     requiereArtePrevio?: boolean;
     enlaceEditableArte?: string;
     notasArteParaVideo?: string;
-  }) => void;
+  }) => Promise<boolean | void> | boolean | void;
   onDeletePost?: (postId: string) => void;
-  onSendToReview?: (post: Post, odt: ODT) => void;
+  onSendToReview?: (post: Post, odt: ODT) => Promise<boolean | void> | boolean | void;
   onDuplicatePost?: (post: Post, newRedSocial: string) => void;
   onRecyclePost?: (post: Post) => void;
   onOpenPublishModal?: (post: Post) => void;
@@ -169,53 +169,138 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   const [editRequiereArtePrevio, setEditRequiereArtePrevio] = useState<boolean>(post.requiereArtePrevio || false);
   const [editEnlaceEditableArte, setEditEnlaceEditableArte] = useState<string>(post.enlaceEditableArte || '');
   const [editNotasArteParaVideo, setEditNotasArteParaVideo] = useState<string>(post.notasArteParaVideo || '');
+  const copyInEditorRef = useRef<RichTextEditorHandle>(null);
+  const copyOutEditorRef = useRef<RichTextEditorHandle>(null);
+  const prevPostIdRef = useRef<string>(post.id);
+  const prevInitialEditModeRef = useRef<boolean | undefined>(initialEditMode);
+
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [unsavedClosePrompt, setUnsavedClosePrompt] = useState<'close' | 'exitEdit' | null>(null);
+
+  const syncFieldsFromPost = (targetPost: Post, targetOdt?: ODT) => {
+    setEditNumeroInterno(targetPost.numeroInterno || '');
+    setEditPilar(targetPost.pilar || (targetOdt?.pilares && targetOdt.pilares.length > 0 ? targetOdt.pilares[0] : DEFAULT_PILARES[0]));
+    setEditCopyIn(targetPost.copyIn || '');
+    setEditCopyOut(targetPost.copyOut || '');
+    setEditEnlaceReferencia(targetPost.enlaceReferencia || '');
+    setEditEnlaceMaterialFinal(targetPost.enlaceMaterialFinal || '');
+    setEditFechaPrevista(targetPost.fechaPrevista || '');
+    setEditFechaEntregaMaterial(targetPost.fechaEntregaMaterial || targetPost.fechaPrevista || '');
+    setEditTipoMaterial(targetPost.tipoMaterial || 'Imagen');
+    setEditDimensiones(targetPost.dimensiones || '1080x1080 (1:1 Cuadrado)');
+    setEditNivelPrioridad(targetPost.nivelPrioridad || 'Nivel 2');
+    setEditRequiereRevisionMedica(targetPost.requiereRevisionMedica === true || Boolean(targetOdt?.requiereMedico));
+    setEditRequiereArtePrevio(targetPost.requiereArtePrevio || false);
+    setEditEnlaceEditableArte(targetPost.enlaceEditableArte || '');
+    setEditNotasArteParaVideo(targetPost.notasArteParaVideo || '');
+  };
+
+  // Solo sincronizar campos desde Firestore cuando cambia el ID del post o cuando NO se está editando ni guardando.
+  // Esto evita que las actualizaciones en tiempo real borren el copy que el usuario está escribiendo.
+  useEffect(() => {
+    if (post.id !== prevPostIdRef.current) {
+      prevPostIdRef.current = post.id;
+      syncFieldsFromPost(post, odt);
+      setSaveError(null);
+      setSaveSuccess(false);
+      setUnsavedClosePrompt(null);
+      return;
+    }
+
+    if (!isEditing && !isSaving) {
+      syncFieldsFromPost(post, odt);
+    }
+  }, [post, odt, isEditing, isSaving]);
 
   useEffect(() => {
-    setEditNumeroInterno(post.numeroInterno || '');
-    setEditPilar(post.pilar || (odt?.pilares && odt.pilares.length > 0 ? odt.pilares[0] : DEFAULT_PILARES[0]));
-    setEditCopyIn(post.copyIn || '');
-    setEditCopyOut(post.copyOut || '');
-    setEditEnlaceReferencia(post.enlaceReferencia || '');
-    setEditEnlaceMaterialFinal(post.enlaceMaterialFinal || '');
-    setEditFechaPrevista(post.fechaPrevista || '');
-    setEditFechaEntregaMaterial(post.fechaEntregaMaterial || post.fechaPrevista || '');
-    setEditTipoMaterial(post.tipoMaterial || 'Imagen');
-    setEditDimensiones(post.dimensiones || '1080x1080 (1:1 Cuadrado)');
-    setEditNivelPrioridad(post.nivelPrioridad || 'Nivel 2');
-    setEditRequiereRevisionMedica(post.requiereRevisionMedica === true || Boolean(odt?.requiereMedico));
-    setEditRequiereArtePrevio(post.requiereArtePrevio || false);
-    setEditEnlaceEditableArte(post.enlaceEditableArte || '');
-    setEditNotasArteParaVideo(post.notasArteParaVideo || '');
-  }, [post, odt]);
-
-  useEffect(() => {
-    if (initialEditMode !== undefined) {
-      setIsEditing(initialEditMode);
+    if (initialEditMode !== prevInitialEditModeRef.current) {
+      prevInitialEditModeRef.current = initialEditMode;
+      if (initialEditMode !== undefined) {
+        setIsEditing(initialEditMode);
+      }
     }
   }, [initialEditMode]);
+
+  const getLiveCopys = () => {
+    const liveIn = copyInEditorRef.current ? copyInEditorRef.current.flush() : editCopyIn;
+    const liveOut = copyOutEditorRef.current ? copyOutEditorRef.current.flush() : editCopyOut;
+    return {
+      copyIn: liveIn.trim(),
+      copyOut: liveOut.trim()
+    };
+  };
+
+  const hasUnsavedChanges = () => {
+    const liveIn = (copyInEditorRef.current ? copyInEditorRef.current.getHtml() : editCopyIn).trim();
+    const liveOut = (copyOutEditorRef.current ? copyOutEditorRef.current.getHtml() : editCopyOut).trim();
+    if (liveIn !== (post.copyIn || '').trim()) return true;
+    if (liveOut !== (post.copyOut || '').trim()) return true;
+    if (canEditFullPost) {
+      if ((editNumeroInterno || '').trim() !== (post.numeroInterno || '').trim()) return true;
+      if ((editEnlaceReferencia || '').trim() !== (post.enlaceReferencia || '').trim()) return true;
+      if ((editEnlaceMaterialFinal || '').trim() !== (post.enlaceMaterialFinal || '').trim()) return true;
+      if (editFechaPrevista !== (post.fechaPrevista || '')) return true;
+      if (editFechaEntregaMaterial !== (post.fechaEntregaMaterial || post.fechaPrevista || '')) return true;
+      if (editTipoMaterial !== (post.tipoMaterial || 'Imagen')) return true;
+      if (editDimensiones !== (post.dimensiones || '1080x1080 (1:1 Cuadrado)')) return true;
+      if (editNivelPrioridad !== (post.nivelPrioridad || 'Nivel 2')) return true;
+      if (editPilar !== (post.pilar || (odt?.pilares && odt.pilares.length > 0 ? odt.pilares[0] : DEFAULT_PILARES[0]))) return true;
+    }
+    return false;
+  };
+
+  const handleSafeClose = () => {
+    if (isSaving) return;
+    if (isEditing && hasUnsavedChanges()) {
+      setUnsavedClosePrompt('close');
+      return;
+    }
+    onClose();
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (isDuplicateDialogOpen) {
           setIsDuplicateDialogOpen(false);
+        } else if (isCalendarOpen) {
+          setIsCalendarOpen(false);
+        } else if (isResolveModalOpen) {
+          setIsResolveModalOpen(false);
         } else {
-          onClose();
+          handleSafeClose();
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, isDuplicateDialogOpen]);
+  });
 
-  const handleSavePostEdits = () => {
-    if (onUpdatePost) {
+  const handleSavePostEdits = async () => {
+    if (isSaving) return;
+    const { copyIn: finalCopyIn, copyOut: finalCopyOut } = getLiveCopys();
+    setEditCopyIn(finalCopyIn);
+    setEditCopyOut(finalCopyOut);
+    setSaveError(null);
+    setUnsavedClosePrompt(null);
+
+    if (!onUpdatePost) {
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      setIsEditing(false);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      let result: boolean | void;
       if (isOnlyCopyEditor) {
         // Corrector o Médico: solo edita copys, preserva intactos todos los parámetros del post
-        onUpdatePost(post.id, {
-          copyIn: editCopyIn.trim(),
-          copyOut: editCopyOut.trim()
+        result = await onUpdatePost(post.id, {
+          copyIn: finalCopyIn,
+          copyOut: finalCopyOut
         });
       } else {
         const isCopyPhase = ['Borrador', 'En Community', 'Ajustes de Copy', 'Cambios solicitados por Cliente', 'Revisión Médica', 'Corrección de Copy', 'Esperando Ejecutivo'].includes(post.estado);
@@ -224,11 +309,11 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
         const autoRespId = isCopyPhase ? post.responsableActualId : (editTipoMaterial === 'Video' ? (odt?.editorAvId || '') : (odt?.disenadorId || ''));
         const finalReqMed = alreadyHadMedicalReview ? true : editRequiereRevisionMedica;
 
-        onUpdatePost(post.id, {
+        result = await onUpdatePost(post.id, {
           numeroInterno: editNumeroInterno.trim() || post.numeroInterno,
           pilar: editPilar,
-          copyIn: editCopyIn.trim(),
-          copyOut: editCopyOut.trim(),
+          copyIn: finalCopyIn,
+          copyOut: finalCopyOut,
           enlaceReferencia: editEnlaceReferencia.trim(),
           enlaceMaterialFinal: editEnlaceMaterialFinal.trim(),
           fechaPrevista: editFechaPrevista,
@@ -245,13 +330,30 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           notasArteParaVideo: editNotasArteParaVideo.trim()
         });
       }
+
+      if (result === false) {
+        setSaveError('No se pudieron guardar los cambios en la base de datos. Verifica tu conexión e inténtalo de nuevo.');
+        return;
+      }
+
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      setIsEditing(false);
+    } catch {
+      setSaveError('Ocurrió un error de conexión al guardar en Firebase. Tus textos siguen aquí; presiona "Guardar" nuevamente.');
+    } finally {
+      setIsSaving(false);
     }
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
-    setIsEditing(false);
   };
 
-  const handleSaveAndSendToReview = () => {
+  const handleSaveAndSendToReview = async () => {
+    if (isSaving) return;
+    const { copyIn: finalCopyIn, copyOut: finalCopyOut } = getLiveCopys();
+    setEditCopyIn(finalCopyIn);
+    setEditCopyOut(finalCopyOut);
+    setSaveError(null);
+    setUnsavedClosePrompt(null);
+
     const finalName = editNumeroInterno.trim() || post.numeroInterno;
     const autoArea = editTipoMaterial === 'Video' ? 'Audio y Video' : 'Arte';
     const autoRespName = editTipoMaterial === 'Video' ? (odt?.editorAvName || '') : (odt?.disenadorName || '');
@@ -261,8 +363,8 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
     const updatedData = {
       numeroInterno: finalName,
       pilar: editPilar,
-      copyIn: editCopyIn.trim(),
-      copyOut: editCopyOut.trim(),
+      copyIn: finalCopyIn,
+      copyOut: finalCopyOut,
       enlaceReferencia: editEnlaceReferencia.trim(),
       enlaceMaterialFinal: editEnlaceMaterialFinal.trim(),
       fechaPrevista: editFechaPrevista,
@@ -279,32 +381,39 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       notasArteParaVideo: editNotasArteParaVideo.trim()
     };
 
-    if (odt && onSendToReview) {
-      const updatedPost: Post = {
-        ...post,
-        ...updatedData
-      };
-      onSendToReview(updatedPost, odt);
-      onClose();
-    } else if (onUpdatePost) {
-      onUpdatePost(post.id, updatedData);
-      onClose();
+    setIsSaving(true);
+    try {
+      if (odt && onSendToReview) {
+        const updatedPost: Post = {
+          ...post,
+          ...updatedData
+        };
+        const res = await onSendToReview(updatedPost, odt);
+        if (res === false) {
+          setSaveError('No se pudo confirmar el envío en la base de datos. Inténtalo de nuevo.');
+          return;
+        }
+        onClose();
+      } else if (onUpdatePost) {
+        const res = await onUpdatePost(post.id, updatedData);
+        if (res === false) {
+          setSaveError('No se pudo confirmar el guardado en la base de datos. Inténtalo de nuevo.');
+          return;
+        }
+        onClose();
+      }
+    } catch {
+      setSaveError('Error de conexión al guardar y enviar a revisión. Tus cambios siguen intactos para reintentar.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleCancelEdits = () => {
-    setEditNumeroInterno(post.numeroInterno || '');
-    setEditPilar(post.pilar || (odt?.pilares && odt.pilares.length > 0 ? odt.pilares[0] : DEFAULT_PILARES[0]));
-    setEditCopyIn(post.copyIn || '');
-    setEditCopyOut(post.copyOut || '');
-    setEditEnlaceReferencia(post.enlaceReferencia || '');
-    setEditEnlaceMaterialFinal(post.enlaceMaterialFinal || '');
-    setEditFechaPrevista(post.fechaPrevista || '');
-    setEditFechaEntregaMaterial(post.fechaEntregaMaterial || post.fechaPrevista || '');
-    setEditTipoMaterial(post.tipoMaterial || 'Imagen');
-    setEditDimensiones(post.dimensiones || '1080x1080 (1:1 Cuadrado)');
-    setEditNivelPrioridad(post.nivelPrioridad || 'Nivel 2');
-    setEditRequiereRevisionMedica(alreadyHadMedicalReview);
+    if (isSaving) return;
+    syncFieldsFromPost(post, odt);
+    setSaveError(null);
+    setUnsavedClosePrompt(null);
     setIsEditing(false);
   };
 
@@ -362,7 +471,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-6 pt-14 sm:pt-14 overflow-y-auto"
-      onClick={onClose}
+      onClick={handleSafeClose}
     >
       {/* Contenedor relativo para alojar el botón Cerrar afuera del modal */}
       <div 
@@ -372,8 +481,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
         {/* Botón flotante exterior de Cerrar */}
         <button
           type="button"
-          onClick={onClose}
-          className="absolute -top-11 right-0 sm:right-1 z-30 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900 hover:bg-black text-white text-xs font-bold border border-slate-700/80 shadow-2xl transition-all hover:scale-105 cursor-pointer backdrop-blur-xs"
+          onClick={handleSafeClose}
+          disabled={isSaving}
+          className="absolute -top-11 right-0 sm:right-1 z-30 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-900 hover:bg-black text-white text-xs font-bold border border-slate-700/80 shadow-2xl transition-all hover:scale-105 cursor-pointer backdrop-blur-xs disabled:opacity-50"
           title="Cerrar ventana (Esc o clic afuera)"
         >
           <X className="w-4 h-4 text-slate-300" />
@@ -421,7 +531,18 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     type="button"
                     onClick={() => {
                       setActiveTab('content');
-                      setIsEditing(!isEditing);
+                      if (!isEditing) {
+                        syncFieldsFromPost(post, odt);
+                        setSaveError(null);
+                        setUnsavedClosePrompt(null);
+                        setIsEditing(true);
+                      } else if (!isSaving) {
+                        if (hasUnsavedChanges()) {
+                          setUnsavedClosePrompt('exitEdit');
+                        } else {
+                          setIsEditing(false);
+                        }
+                      }
                     }}
                     className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
                       isEditing 
@@ -761,11 +882,55 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                 );
               })()}
 
+              {/* Aviso de cambios sin guardar al intentar cerrar */}
+              {unsavedClosePrompt && (
+                <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl text-xs text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-150 shadow-xs">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block">Tienes cambios sin guardar en los copys</strong>
+                      <span className="text-[11px] text-amber-800">Si sales ahora se perderán las modificaciones que acabas de redactar.</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setUnsavedClosePrompt(null)}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-900 font-bold hover:bg-amber-100 cursor-pointer"
+                    >
+                      Seguir editando
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const action = unsavedClosePrompt;
+                        handleCancelEdits();
+                        if (action === 'close') onClose();
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-rose-600 text-white font-bold hover:bg-rose-700 cursor-pointer"
+                    >
+                      Descartar y {unsavedClosePrompt === 'close' ? 'cerrar' : 'salir'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Error de guardado */}
+              {saveError && (
+                <div className="p-3.5 bg-rose-50 border-2 border-rose-300 rounded-xl text-xs text-rose-950 flex items-start gap-2.5 animate-in fade-in duration-150">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <strong className="block text-rose-900">No se pudo guardar en la nube</strong>
+                    <p className="text-[11px] text-rose-800 mt-0.5">{saveError}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Feedback de guardado exitoso */}
               {saveSuccess && (
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2 animate-in fade-in duration-200">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span><strong>¡Cambios guardados con éxito!</strong> El copy in y copy out han sido actualizados en la parrilla.</span>
+                  <span><strong>¡Cambios guardados con éxito!</strong> El copy in y copy out han sido confirmados en Firebase y en la parrilla.</span>
                 </div>
               )}
 
@@ -1073,6 +1238,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       Texto conciso y de alto impacto que el equipo de diseño integrará dentro del arte visual.
                     </p>
                     <RichTextEditor
+                      ref={copyInEditorRef}
                       value={editCopyIn}
                       onChange={setEditCopyIn}
                       placeholder="Escribe el copy in enriquecido que irá sobre la imagen o arte..."
@@ -1090,6 +1256,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       Copy del post, descripción detallada, hashtags y llamada a la acción (CTA) para el feed.
                     </p>
                     <RichTextEditor
+                      ref={copyOutEditorRef}
                       value={editCopyOut}
                       onChange={setEditCopyOut}
                       placeholder="Escribe el caption o copy out completo enriquecido para la publicación..."
@@ -1193,7 +1360,8 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     <button
                       type="button"
                       onClick={handleCancelEdits}
-                      className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-200 hover:bg-slate-300 rounded-xl transition-colors cursor-pointer"
+                      disabled={isSaving}
+                      className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-200 hover:bg-slate-300 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
                     >
                       Cancelar
                     </button>
@@ -1202,25 +1370,35 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       <button
                         type="button"
                         onClick={handleSavePostEdits}
-                        className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer ${
+                        disabled={isSaving}
+                        className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait ${
                           isOnlyCopyEditor 
                             ? 'bg-purple-600 hover:bg-purple-700' 
                             : 'bg-indigo-600 hover:bg-indigo-700'
                         }`}
                       >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>{isOnlyCopyEditor ? 'Guardar Copys' : 'Guardar Cambios'}</span>
+                        {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        <span>
+                          {isSaving
+                            ? 'Guardando...'
+                            : isOnlyCopyEditor
+                            ? 'Guardar Copys'
+                            : 'Guardar Cambios'}
+                        </span>
                       </button>
 
                       {canEditFullPost && odt && onSendToReview && (post.estado === 'Ajustes de Copy' || post.estado === 'En Community' || post.estado === 'Borrador' || post.estado === 'Cambios solicitados por Cliente') && (
                         <button
                           type="button"
                           onClick={handleSaveAndSendToReview}
-                          className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          disabled={isSaving}
+                          className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
                         >
-                          <Send className="w-3.5 h-3.5" />
+                          {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                           <span>
-                            {post.solicitadoPorRole === 'Corrector' 
+                            {isSaving
+                              ? 'Enviando...'
+                              : post.solicitadoPorRole === 'Corrector' 
                               ? 'Guardar y Regresar a Corrección' 
                               : post.solicitadoPorRole === 'Médico' 
                               ? 'Guardar y Regresar a Médico' 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, Client, ODT, Post, PostStatus, PostComment, PostIntervention, UserRole, MaterialType, PriorityLevel, PostPublicationLink, PostObservationResolution } from './types';
 import { 
   loadInitialData, getStoredUsers, getStoredClients, saveStoredClients, 
@@ -24,6 +24,9 @@ import { Crown, ArrowLeft } from 'lucide-react';
 import { dbSave, dbDelete, dbListen } from './services/firebase';
 
 export const App: React.FC = () => {
+  const savingPostIdsRef = useRef<Set<string>>(new Set());
+  const postsRef = useRef<Post[]>([]);
+
   // Inicialización de datos locales y conexión con Firebase Firestore
   useEffect(() => {
     loadInitialData();
@@ -91,7 +94,7 @@ export const App: React.FC = () => {
           }
         });
 
-        unsubPosts = dbListen('posts', (loadedPosts) => {
+        unsubPosts = dbListen('posts', (loadedPosts, meta) => {
           if (loadedPosts.length > 0 && isSubscribed) {
             const currentOdts = getStoredOdts();
             const cleanedPosts = loadedPosts.map(p => {
@@ -136,20 +139,37 @@ export const App: React.FC = () => {
               return p;
             });
 
-            setPosts(cleanedPosts);
-            saveStoredPosts(cleanedPosts);
+            // Preservar posts que tengan un guardado local en curso para evitar sobrescritura por snapshots intermedios del servidor
+            const mergedPosts = (savingPostIdsRef.current.size > 0 && !meta?.hasPendingWrites)
+              ? cleanedPosts.map(cp => {
+                  if (savingPostIdsRef.current.has(cp.id)) {
+                    const localInFlight = postsRef.current.find(lp => lp.id === cp.id);
+                    return localInFlight || cp;
+                  }
+                  return cp;
+                })
+              : cleanedPosts;
+
+            setPosts(mergedPosts);
+            saveStoredPosts(mergedPosts);
             // Sincronizar activeModalPost para evitar referencias obsoletas
             setActiveModalPost(current => {
               if (!current) return null;
-              return cleanedPosts.find(p => p.id === current.id) || current;
+              return mergedPosts.find(p => p.id === current.id) || current;
             });
 
             // Verificar si la finalización de estos posts resuelve ODTs con alerta de cambios
             setOdts(prevOdts => {
-              const healed = sanitizeOdtsWithCompletedChanges(prevOdts, cleanedPosts);
-              if (JSON.stringify(healed) !== JSON.stringify(prevOdts)) {
+              const healed = sanitizeOdtsWithCompletedChanges(prevOdts, mergedPosts);
+              let anyChanged = false;
+              healed.forEach((ho, idx) => {
+                if (JSON.stringify(ho) !== JSON.stringify(prevOdts[idx])) {
+                  anyChanged = true;
+                  dbSave('odts', ho.id, ho);
+                }
+              });
+              if (anyChanged) {
                 saveStoredOdts(healed);
-                healed.forEach(ho => dbSave('odts', ho.id, ho));
                 return healed;
               }
               return prevOdts;
@@ -242,6 +262,7 @@ export const App: React.FC = () => {
       return p;
     });
   });
+  postsRef.current = posts;
 
   // Real login and user credentials state
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
@@ -689,7 +710,7 @@ export const App: React.FC = () => {
   };
 
   // 2.1 Actualizar contenido y especificaciones de un post (Nombre / Número, Copy In, Copy Out, Enlaces, Fechas, Medidas, Prioridad)
-  const handleUpdatePostContent = (
+  const handleUpdatePostContent = async (
     postId: string,
     data: {
       numeroInterno?: string;
@@ -702,44 +723,69 @@ export const App: React.FC = () => {
       tipoMaterial?: MaterialType;
       dimensiones?: string;
       nivelPrioridad?: PriorityLevel;
+      pilar?: string;
+      requiereRevisionMedica?: boolean;
+      areaResponsable?: string;
+      responsableActualId?: string;
+      responsableActualName?: string;
       requiereArtePrevio?: boolean;
       enlaceEditableArte?: string;
       notasArteParaVideo?: string;
     }
-  ) => {
-    const updated = posts.map(p => {
-      if (p.id !== postId) return p;
-      const historyEntry = createIntervention(
-        currentUser,
-        'Actualización de Ficha y Copys',
-        `Ficha y especificaciones editadas por ${currentUser.name} (${currentUser.role}).${data.numeroInterno && data.numeroInterno !== p.numeroInterno ? ` Nombre cambiado a "${data.numeroInterno}".` : ''}`,
-        p.estado
-      );
-      return {
-        ...p,
-        numeroInterno: (data.numeroInterno !== undefined && data.numeroInterno.trim()) ? data.numeroInterno.trim() : p.numeroInterno,
-        pilar: (data as any).pilar !== undefined ? (data as any).pilar : p.pilar,
-        copyIn: data.copyIn !== undefined ? data.copyIn : p.copyIn,
-        copyOut: data.copyOut !== undefined ? data.copyOut : p.copyOut,
-        enlaceReferencia: data.enlaceReferencia !== undefined ? data.enlaceReferencia : p.enlaceReferencia,
-        enlaceMaterialFinal: data.enlaceMaterialFinal !== undefined ? data.enlaceMaterialFinal : p.enlaceMaterialFinal,
-        fechaPrevista: data.fechaPrevista !== undefined ? data.fechaPrevista : p.fechaPrevista,
-        fechaEntregaMaterial: data.fechaEntregaMaterial !== undefined ? data.fechaEntregaMaterial : p.fechaEntregaMaterial,
-        tipoMaterial: data.tipoMaterial !== undefined ? data.tipoMaterial : p.tipoMaterial,
-        dimensiones: data.dimensiones !== undefined ? data.dimensiones : p.dimensiones,
-        nivelPrioridad: data.nivelPrioridad !== undefined ? data.nivelPrioridad : p.nivelPrioridad,
-        requiereRevisionMedica: (data as any).requiereRevisionMedica !== undefined ? (data as any).requiereRevisionMedica : p.requiereRevisionMedica,
-        areaResponsable: (data as any).areaResponsable !== undefined ? (data as any).areaResponsable : p.areaResponsable,
-        responsableActualId: (data as any).responsableActualId !== undefined ? (data as any).responsableActualId : p.responsableActualId,
-        responsableActualName: (data as any).responsableActualName !== undefined ? (data as any).responsableActualName : p.responsableActualName,
-        requiereArtePrevio: data.requiereArtePrevio !== undefined ? data.requiereArtePrevio : p.requiereArtePrevio,
-        enlaceEditableArte: data.enlaceEditableArte !== undefined ? data.enlaceEditableArte : p.enlaceEditableArte,
-        notasArteParaVideo: data.notasArteParaVideo !== undefined ? data.notasArteParaVideo : p.notasArteParaVideo,
-        historial: [historyEntry, ...p.historial],
-        updatedAt: getNowTimestamp()
-      };
+  ): Promise<boolean> => {
+    const currentList = postsRef.current;
+    const targetPost = currentList.find(p => p.id === postId) || (activeModalPost?.id === postId ? activeModalPost : undefined);
+    if (!targetPost) return false;
+
+    const historyEntry = createIntervention(
+      currentUser,
+      'Actualización de Ficha y Copys',
+      `Ficha y especificaciones editadas por ${currentUser.name} (${currentUser.role}).${data.numeroInterno && data.numeroInterno !== targetPost.numeroInterno ? ` Nombre cambiado a "${data.numeroInterno}".` : ''}`,
+      targetPost.estado
+    );
+
+    const updatedPost: Post = {
+      ...targetPost,
+      numeroInterno: (data.numeroInterno !== undefined && data.numeroInterno.trim()) ? data.numeroInterno.trim() : targetPost.numeroInterno,
+      pilar: data.pilar !== undefined ? data.pilar : targetPost.pilar,
+      copyIn: data.copyIn !== undefined ? data.copyIn : targetPost.copyIn,
+      copyOut: data.copyOut !== undefined ? data.copyOut : targetPost.copyOut,
+      enlaceReferencia: data.enlaceReferencia !== undefined ? data.enlaceReferencia : targetPost.enlaceReferencia,
+      enlaceMaterialFinal: data.enlaceMaterialFinal !== undefined ? data.enlaceMaterialFinal : targetPost.enlaceMaterialFinal,
+      fechaPrevista: data.fechaPrevista !== undefined ? data.fechaPrevista : targetPost.fechaPrevista,
+      fechaEntregaMaterial: data.fechaEntregaMaterial !== undefined ? data.fechaEntregaMaterial : targetPost.fechaEntregaMaterial,
+      tipoMaterial: data.tipoMaterial !== undefined ? data.tipoMaterial : targetPost.tipoMaterial,
+      dimensiones: data.dimensiones !== undefined ? data.dimensiones : targetPost.dimensiones,
+      nivelPrioridad: data.nivelPrioridad !== undefined ? data.nivelPrioridad : targetPost.nivelPrioridad,
+      requiereRevisionMedica: data.requiereRevisionMedica !== undefined ? data.requiereRevisionMedica : targetPost.requiereRevisionMedica,
+      areaResponsable: data.areaResponsable !== undefined ? data.areaResponsable : targetPost.areaResponsable,
+      responsableActualId: data.responsableActualId !== undefined ? data.responsableActualId : targetPost.responsableActualId,
+      responsableActualName: data.responsableActualName !== undefined ? data.responsableActualName : targetPost.responsableActualName,
+      requiereArtePrevio: data.requiereArtePrevio !== undefined ? data.requiereArtePrevio : targetPost.requiereArtePrevio,
+      enlaceEditableArte: data.enlaceEditableArte !== undefined ? data.enlaceEditableArte : targetPost.enlaceEditableArte,
+      notasArteParaVideo: data.notasArteParaVideo !== undefined ? data.notasArteParaVideo : targetPost.notasArteParaVideo,
+      historial: [historyEntry, ...targetPost.historial],
+      updatedAt: getNowTimestamp()
+    };
+
+    savingPostIdsRef.current.add(postId);
+    setPosts(prev => {
+      const next = prev.map(p => p.id === postId ? updatedPost : p);
+      postsRef.current = next;
+      saveStoredPosts(next);
+      return next;
     });
-    updatePostsState(updated);
+    setActiveModalPost(curr => (curr && curr.id === postId ? updatedPost : curr));
+
+    try {
+      await dbSave('posts', postId, updatedPost, { throwOnError: true });
+      return true;
+    } catch (error) {
+      console.error('Error al guardar cambios del post en Firebase:', error);
+      return false;
+    } finally {
+      savingPostIdsRef.current.delete(postId);
+    }
   };
 
   // 2.2 Duplicar Post (para otra red social o variante)
@@ -773,7 +819,7 @@ export const App: React.FC = () => {
   };
 
   // 3. Enviar a Revisión Inteligente (Community -> Revisor específico o Inicio de Cadena)
-  const handleSendToReview = (post: Post, odt: ODT) => {
+  const handleSendToReview = async (post: Post, odt: ODT): Promise<boolean> => {
     const reqMedico = post.requiereRevisionMedica !== undefined ? post.requiereRevisionMedica : odt.requiereMedico;
 
     let nextStatus: PostStatus = 'Corrección de Copy';
@@ -827,24 +873,39 @@ export const App: React.FC = () => {
       nextStatus
     );
 
-    const updated = posts.map(p => {
-      if (p.id !== post.id) return p;
-      return {
-        ...p,
-        ...post, // Conservar los textos editados de copyIn, copyOut, enlaceReferencia, pilar, etc.
-        estado: nextStatus,
-        areaResponsable: nextArea,
-        responsableActualName: nextRespName,
-        responsableActualId: nextRespId,
-        solicitadoPorRole: undefined, // Limpiar rastreo activo una vez devuelto
-        solicitadoPorName: undefined,
-        solicitadoPorUserId: undefined,
-        historial: [intervention, ...p.historial],
-        updatedAt: getNowTimestamp()
-      };
-    });
+    const basePost = postsRef.current.find(p => p.id === post.id) || post;
+    const finalPost: Post = {
+      ...basePost,
+      ...post, // Conservar los textos editados de copyIn, copyOut, enlaceReferencia, pilar, etc.
+      estado: nextStatus,
+      areaResponsable: nextArea,
+      responsableActualName: nextRespName,
+      responsableActualId: nextRespId,
+      solicitadoPorRole: undefined, // Limpiar rastreo activo una vez devuelto
+      solicitadoPorName: undefined,
+      solicitadoPorUserId: undefined,
+      historial: [intervention, ...basePost.historial],
+      updatedAt: getNowTimestamp()
+    };
 
-    updatePostsState(updated);
+    savingPostIdsRef.current.add(post.id);
+    setPosts(prev => {
+      const next = prev.map(p => p.id === post.id ? finalPost : p);
+      postsRef.current = next;
+      saveStoredPosts(next);
+      return next;
+    });
+    setActiveModalPost(curr => (curr && curr.id === post.id ? finalPost : curr));
+
+    try {
+      await dbSave('posts', post.id, finalPost, { throwOnError: true });
+      return true;
+    } catch (error) {
+      console.error('Error al guardar y enviar a revisión en Firebase:', error);
+      return false;
+    } finally {
+      savingPostIdsRef.current.delete(post.id);
+    }
   };
 
   // 4. Ejecutivo envía a Cliente (Esperando Ejecutivo -> Aprobación Copy Cliente)
@@ -1383,44 +1444,40 @@ export const App: React.FC = () => {
       comentarioOriginal: post.aprobacionClienteCopy?.comment || post.aprobacionClienteMaterial?.comment || ''
     };
 
-    const newCopyIn = updatedCopys?.copyIn !== undefined ? updatedCopys.copyIn : post.copyIn;
-    const newCopyOut = updatedCopys?.copyOut !== undefined ? updatedCopys.copyOut : post.copyOut;
+    const basePost = postsRef.current.find(p => p.id === post.id) || post;
+    const newCopyIn = updatedCopys?.copyIn !== undefined ? updatedCopys.copyIn : basePost.copyIn;
+    const newCopyOut = updatedCopys?.copyOut !== undefined ? updatedCopys.copyOut : basePost.copyOut;
 
-    const updated = posts.map(p => {
-      if (p.id !== post.id) return p;
-      return {
-        ...p,
-        copyIn: newCopyIn,
-        copyOut: newCopyOut,
-        solicitadoPorRole: (revert ? undefined : 'Cliente') as 'Cliente' | undefined,
-        estado: nextStatus,
-        areaResponsable: nextArea,
-        responsableActualName: nextRespName,
-        responsableActualId: nextRespId,
-        observacionClienteAtendida: updatedResolution,
-        historial: [intervention, ...p.historial],
-        updatedAt: getNowTimestamp()
-      };
+    const resolvedPost: Post = {
+      ...basePost,
+      copyIn: newCopyIn,
+      copyOut: newCopyOut,
+      solicitadoPorRole: (revert ? undefined : 'Cliente') as 'Cliente' | undefined,
+      estado: nextStatus,
+      areaResponsable: nextArea,
+      responsableActualName: nextRespName,
+      responsableActualId: nextRespId,
+      observacionClienteAtendida: updatedResolution,
+      historial: [intervention, ...basePost.historial],
+      updatedAt: getNowTimestamp()
+    };
+
+    savingPostIdsRef.current.add(post.id);
+    setPosts(prev => {
+      const next = prev.map(p => p.id === post.id ? resolvedPost : p);
+      postsRef.current = next;
+      saveStoredPosts(next);
+      return next;
     });
-
-    updatePostsState(updated);
 
     // Actualizar activeModalPost para reflejar de inmediato el cambio en el modal si está abierto
     setActiveModalPost(current => {
       if (!current || current.id !== post.id) return current;
-      return {
-        ...current,
-        copyIn: newCopyIn,
-        copyOut: newCopyOut,
-        solicitadoPorRole: (revert ? undefined : 'Cliente') as 'Cliente' | undefined,
-        estado: nextStatus,
-        areaResponsable: nextArea,
-        responsableActualName: nextRespName,
-        responsableActualId: nextRespId,
-        observacionClienteAtendida: updatedResolution,
-        historial: [intervention, ...current.historial],
-        updatedAt: getNowTimestamp()
-      };
+      return resolvedPost;
+    });
+
+    dbSave('posts', post.id, resolvedPost).finally(() => {
+      savingPostIdsRef.current.delete(post.id);
     });
   };
 

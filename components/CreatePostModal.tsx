@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Post, ODT, MaterialType, PostDimensions, PriorityLevel, User, DEFAULT_PILARES } from '../types';
 import { Sparkles, X, Plus, ExternalLink, Send, Calendar, Clock, Layers, AlertCircle, Palette } from 'lucide-react';
-import { RichTextEditor } from './RichTextEditor';
+import { RichTextEditor, RichTextEditorHandle } from './RichTextEditor';
 import { InteractiveCalendarPicker, getPilarColor } from './InteractiveCalendarPicker';
 
 interface CreatePostModalProps {
@@ -92,6 +92,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   const [nivelPrioridad, setNivelPrioridad] = useState<PriorityLevel>('Nivel 2');
   const [copyIn, setCopyIn] = useState('');
   const [copyOut, setCopyOut] = useState('');
+  const copyInEditorRef = useRef<RichTextEditorHandle>(null);
+  const copyOutEditorRef = useRef<RichTextEditorHandle>(null);
   const [enlaceReferencia, setEnlaceReferencia] = useState('');
 
   // Para videos: detección inteligente si la ODT/cliente es Telefém
@@ -145,6 +147,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       }
     }
 
+    const finalCopyIn = (copyInEditorRef.current ? copyInEditorRef.current.flush() : copyIn).trim();
+    const finalCopyOut = (copyOutEditorRef.current ? copyOutEditorRef.current.flush() : copyOut).trim();
+
     const newPost: Post = {
       id: 'post-' + Date.now(),
       numeroInterno: numeroInterno.trim(),
@@ -157,8 +162,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       tipoMaterial,
       dimensiones,
       nivelPrioridad,
-      copyIn: copyIn.trim(),
-      copyOut: copyOut.trim(),
+      copyIn: finalCopyIn,
+      copyOut: finalCopyOut,
       enlaceReferencia: enlaceReferencia.trim(),
       enlaceMaterialFinal: '',
       requiereArtePrevio: tipoMaterial === 'Video' ? requiereArtePrevio : false,
@@ -605,6 +610,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               Copy In (Texto enriquecido sobre la imagen / gráfica)
             </label>
             <RichTextEditor
+              ref={copyInEditorRef}
               value={copyIn}
               onChange={setCopyIn}
               placeholder="Titular, bullet points, llamados a la acción sobre la gráfica..."
@@ -617,6 +623,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               Copy Out (Texto enriquecido del Post / Caption / Hashtags)
             </label>
             <RichTextEditor
+              ref={copyOutEditorRef}
               value={copyOut}
               onChange={setCopyOut}
               placeholder="Texto completo que acompañará la publicación en redes sociales..."
