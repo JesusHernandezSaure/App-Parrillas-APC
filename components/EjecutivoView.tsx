@@ -3,7 +3,7 @@ import { Client, ODT, Post, User, PostStatus } from '../types';
 import { 
   Building2, Layers, Folder, FolderOpen, Plus, ChevronRight, CheckCircle2, Check,
   Clock, AlertTriangle, ShieldCheck, ExternalLink, ShieldAlert, Send, 
-  Search, Filter, Sparkles, UserCheck, Calendar, ArrowRight, TrendingUp, AlertCircle,
+  Search, Filter, Sparkles, UserCheck, Calendar, ArrowRight, ArrowUp, ArrowDown, TrendingUp, AlertCircle,
   Copy, RefreshCw, X, Share2, Globe, Edit3, CheckSquare, Palette, Video, FileText, Trash2
 } from 'lucide-react';
 import { 
@@ -202,6 +202,7 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedFunnelStage, setSelectedFunnelStage] = useState<string | null>(null);
   const [pacingFilter, setPacingFilter] = useState<string>('all');
+  const [pubDateSort, setPubDateSort] = useState<'none' | 'asc' | 'desc'>('none');
   const [duplicatingPost, setDuplicatingPost] = useState<Post | null>(null);
   const [resolvingPost, setResolvingPost] = useState<Post | null>(null);
   const [targetDuplicateRed, setTargetDuplicateRed] = useState('Instagram');
@@ -723,8 +724,24 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
       );
     }
 
+    if (pubDateSort !== 'none') {
+      const parseDateMs = (dateStr?: string) => {
+        if (!dateStr) return null;
+        const parsed = Date.parse(dateStr);
+        return Number.isNaN(parsed) ? null : parsed;
+      };
+      list = [...list].sort((a, b) => {
+        const aMs = parseDateMs(a.fechaPrevista);
+        const bMs = parseDateMs(b.fechaPrevista);
+        if (aMs === null && bMs === null) return 0;
+        if (aMs === null) return 1;
+        if (bMs === null) return -1;
+        return pubDateSort === 'asc' ? aMs - bMs : bMs - aMs;
+      });
+    }
+
     return list;
-  }, [posts, activeOdt, activeClient, myClients, selectedFunnelStage, pacingFilter, statusFilter, searchTerm, selectedLevel3Stage]);
+  }, [posts, activeOdt, activeClient, myClients, selectedFunnelStage, pacingFilter, statusFilter, searchTerm, selectedLevel3Stage, pubDateSort]);
 
   return (
     <div className="space-y-6">
@@ -1753,13 +1770,14 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                 <h4 className="text-sm font-bold text-slate-800">
                   Posts en esta ODT ({filteredPosts.length})
                 </h4>
-                {(selectedFunnelStage || pacingFilter !== 'all' || statusFilter !== 'all' || searchTerm) && (
+                {(selectedFunnelStage || pacingFilter !== 'all' || statusFilter !== 'all' || searchTerm || pubDateSort !== 'none') && (
                   <button
                     onClick={() => {
                       setSelectedFunnelStage(null);
                       setPacingFilter('all');
                       setStatusFilter('all');
                       setSearchTerm('');
+                      setPubDateSort('none');
                     }}
                     className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline cursor-pointer"
                   >
@@ -1819,6 +1837,38 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
                   <option value="Listo para Publicar">Listo para Publicar</option>
                   <option value="Publicado">Publicado</option>
                 </select>
+
+                {/* Ordenar por Fecha de Publicación (Arriba / Abajo) */}
+                <div className="inline-flex items-center bg-white border border-slate-200 rounded-lg p-0.5 gap-0.5">
+                  <span className="text-[11px] font-semibold text-slate-600 px-2 flex items-center gap-1 select-none">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Fecha Pub.</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPubDateSort(prev => prev === 'asc' ? 'none' : 'asc')}
+                    title="Ordenar por fecha de publicación hacia arriba (más próxima / antigua primero)"
+                    className={`px-2 py-1 rounded-md text-xs font-bold flex items-center gap-0.5 transition-colors cursor-pointer ${
+                      pubDateSort === 'asc'
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPubDateSort(prev => prev === 'desc' ? 'none' : 'desc')}
+                    title="Ordenar por fecha de publicación hacia abajo (más lejana / reciente primero)"
+                    className={`px-2 py-1 rounded-md text-xs font-bold flex items-center gap-0.5 transition-colors cursor-pointer ${
+                      pubDateSort === 'desc'
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1827,13 +1877,14 @@ export const EjecutivoView: React.FC<EjecutivoViewProps> = ({
               <div className="p-12 text-center text-slate-400">
                 <Sparkles className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                 <p className="text-sm font-semibold">No se encontraron posts con los filtros actuales.</p>
-                {(selectedFunnelStage || pacingFilter !== 'all' || statusFilter !== 'all' || searchTerm) && (
+                {(selectedFunnelStage || pacingFilter !== 'all' || statusFilter !== 'all' || searchTerm || pubDateSort !== 'none') && (
                   <button
                     onClick={() => {
                       setSelectedFunnelStage(null);
                       setPacingFilter('all');
                       setStatusFilter('all');
                       setSearchTerm('');
+                      setPubDateSort('none');
                     }}
                     className="mt-3 text-xs text-indigo-600 font-bold hover:underline"
                   >
